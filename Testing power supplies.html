@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Testing power supplies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --panel:#F4F5F8; --panel-ink:#14161C; --pass:#0B8F4D; --fail:#C81E24;
+  --bg:#2336D8; --fg:#F4F6FF;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+}
+:root[data-theme="dark"]{ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+
+*,*::before,*::after{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid currentColor;outline-offset:3px}
+
+#app{min-height:100%;display:grid;grid-template-columns:minmax(0,1fr);gap:18px 28px;padding:18px clamp(14px,3vw,36px) 22px}
+@media (min-width:900px){
+  #app{height:100%;grid-template-columns:190px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+  header,footer{grid-column:1 / -1}
+}
+
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+h1{margin:0;font-family:Archivo,"Helvetica Neue",Arial,sans-serif;font-weight:800;font-stretch:112%;font-size:clamp(20px,2.4vw,28px);letter-spacing:-.01em}
+#models{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;flex-direction:column;align-items:flex-start;border:2px solid currentColor;background:transparent;border-radius:14px;padding:6px 14px;min-height:44px;line-height:1.15;transition:background-color .2s,color .2s}
+.chip b{font-family:Archivo,sans-serif;font-weight:800;font-size:15px}
+.chip small{font-size:12px;opacity:.85}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+#rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+#rail button{display:flex;align-items:baseline;gap:12px;width:100%;text-align:left;background:none;border:0;border-left:5px solid transparent;padding:9px 0 9px 12px;opacity:.5;transition:opacity .2s}
+#rail button:hover{opacity:.85}
+#rail button.on{opacity:1;border-left-color:currentColor}
+#rail .n{font-family:Archivo,sans-serif;font-weight:800;font-size:22px;min-width:1.1em}
+#rail .t{font-size:16px;font-weight:700}
+@media (max-width:899px){
+  #rail ol{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px}
+  #rail button{border-left:0;border-bottom:4px solid transparent;padding:6px 10px;white-space:nowrap;width:auto}
+  #rail button.on{border-bottom-color:currentColor}
+}
+
+#stage{position:relative;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:center}
+@media (min-width:900px){ #stage{grid-template-columns:minmax(0,1fr) 350px} }
+#plateWrap{min-height:0;height:100%;display:flex;align-items:center;justify-content:center}
+#plateWrap svg{width:100%;height:auto;max-height:100%;overflow:hidden}
+svg text{font-family:"Atkinson Hyperlegible",system-ui,sans-serif}
+.ar{font-family:Archivo,"Helvetica Neue",Arial,sans-serif !important}
+
+/* instrument panel */
+#meter{background:var(--panel);color:var(--panel-ink);border:3px solid var(--panel-ink);border-radius:22px;padding:16px 18px 18px;display:flex;flex-direction:column;gap:10px}
+.mode{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.seg{position:relative;display:inline-grid;grid-template-columns:1fr 1fr;border:2px solid var(--panel-ink);border-radius:999px;font-weight:700;font-size:14px}
+.seg i{position:absolute;top:0;left:0;width:50%;height:100%;border-radius:999px;background:var(--panel-ink)}
+.seg span{position:relative;z-index:1;padding:5px 12px;text-align:center;white-space:nowrap;transition:color .25s}
+.seg span.act{color:var(--panel)}
+.note{font-size:13px;opacity:.7}
+.read{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-height:1em}
+#num{font-family:Archivo,sans-serif;font-weight:800;font-stretch:105%;font-size:clamp(56px,6vw,84px);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+#unit{font-family:Archivo,sans-serif;font-weight:700;font-size:26px}
+#status{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:16px;color:var(--panel-ink)}
+#status::before{content:"";width:12px;height:12px;border-radius:50%;background:currentColor;opacity:.35}
+#meter[data-state="pass"] #status{color:var(--pass)}
+#meter[data-state="pass"] #status::before{opacity:1}
+#meter[data-state="fail"] #status{color:var(--fail)}
+#meter[data-state="fail"] #status::before{opacity:1}
+.gauge{position:relative;height:78px;margin:4px 8px 0}
+.gauge .bar{position:absolute;left:0;right:0;top:27px;height:14px;border-radius:7px;background:color-mix(in srgb,var(--panel-ink) 16%,transparent)}
+#zone{position:absolute;top:23px;height:22px;border-radius:5px;background:var(--pass)}
+#marker{position:absolute;top:7px;width:4px;height:54px;margin-left:-2px;border-radius:2px;background:var(--panel-ink);opacity:0}
+#marker::before{content:"";position:absolute;top:-5px;left:50%;width:12px;height:12px;background:inherit;transform:translateX(-50%) rotate(45deg)}
+#meter[data-state="fail"] #marker{background:var(--fail)}
+.tick{position:absolute;top:54px;transform:translateX(-50%);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+#rule{font-size:14px;opacity:.8}
+.slide{display:flex;flex-direction:column;gap:4px;font-size:13px;opacity:.9}
+.slide input{width:100%;accent-color:var(--panel-ink)}
+.slide input:disabled{opacity:.35}
+#mains{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700}
+#mains button{border:2px solid var(--panel-ink);background:transparent;color:var(--panel-ink);border-radius:999px;padding:4px 12px;min-height:32px}
+#mains button[aria-pressed="true"]{background:var(--panel-ink);color:var(--panel)}
+
+/* paperwork flow */
+#verdict{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;align-content:center;visibility:hidden;opacity:0}
+.vh{font-family:Archivo,sans-serif;font-weight:800;font-size:clamp(16px,1.8vw,22px);padding:0 4px}
+.vc{border-radius:16px;padding:14px 18px;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(16px,1.7vw,24px);line-height:1.2;color:#fff}
+.vc.pass{background:#0B8F4D}
+.vc.fail{background:#C81E24}
+.vc.merge{grid-column:1 / -1;background:transparent;color:inherit;border:3px solid currentColor}
+.conn{width:4px;height:20px;background:currentColor;margin:0 auto;transform-origin:top center}
+
+footer{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 28px}
+#cap{margin:0;flex:1 1 320px;max-width:62ch;min-height:3.6em;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(20px,2.2vw,30px);line-height:1.18}
+.w{display:inline-block;white-space:pre}
+#ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:2px solid currentColor;background:transparent;border-radius:999px;padding:9px 18px;min-height:44px;font-weight:700;font-size:16px}
+.btn:disabled{opacity:.35;cursor:default}
+.btn.go{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn[aria-pressed="true"]{box-shadow:inset 0 0 0 3px currentColor}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Testing power supplies</h1>
+    <div id="models" role="group" aria-label="Power supply model"></div>
+  </header>
+
+  <nav id="rail" aria-label="Steps"><ol></ol></nav>
+
+  <main id="stage">
+    <div id="plateWrap">
+      <svg viewBox="0 100 800 340" role="img" aria-label="Power supply with five wires and two multimeter probes">
+        <defs>
+          <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EEF0F2"/><stop offset=".45" stop-color="#CDD2D8"/><stop offset="1" stop-color="#AFB5BD"/></linearGradient>
+          <linearGradient id="metalH" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#B4BAC2"/><stop offset=".08" stop-color="#E2E5E9"/><stop offset=".92" stop-color="#D3D7DC"/><stop offset="1" stop-color="#A5ABB3"/></linearGradient>
+          <linearGradient id="screwg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F4F5F7"/><stop offset="1" stop-color="#868C95"/></linearGradient>
+          <linearGradient id="blk" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2b2e34"/><stop offset="1" stop-color="#14161a"/></linearGradient>
+          <pattern id="brush" width="3" height="3" patternUnits="userSpaceOnUse"><rect width="3" height="1" fill="#fff" opacity=".16"/></pattern>
+          <pattern id="hexp" width="12" height="6.93" patternUnits="userSpaceOnUse">
+            <g fill="#1b1d21">
+              <polygon points="5.7,3.46 4.35,5.8 1.65,5.8 0.3,3.46 1.65,1.12 4.35,1.12"/>
+              <polygon points="11.7,0 10.35,2.34 7.65,2.34 6.3,0 7.65,-2.34 10.35,-2.34"/>
+              <polygon points="11.7,6.93 10.35,9.27 7.65,9.27 6.3,6.93 7.65,4.59 10.35,4.59"/>
+            </g>
+          </pattern>
+          <pattern id="bars" width="10" height="3" patternUnits="userSpaceOnUse"><rect width="10" height="1.6" fill="#222"/></pattern>
+          <linearGradient id="fadeG" gradientUnits="userSpaceOnUse" x1="0" y1="370" x2="0" y2="436"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
+          <mask id="fadeM" maskUnits="userSpaceOnUse" x="-100" y="90" width="1000" height="360"><rect x="-100" y="90" width="1000" height="360" fill="url(#fadeG)"/></mask>
+          <filter id="blur" x="-10%" y="-200%" width="120%" height="500%"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+
+        <!-- ===== Mean Well LRS-350-5 (photo orientation, terminals on the right edge) ===== -->
+        <g id="art-lrs">
+          <ellipse cx="295" cy="414" rx="250" ry="9" fill="#000" opacity=".28" filter="url(#blur)"/>
+          <rect x="50" y="150" width="490" height="257" rx="5" fill="url(#metal)" stroke="#6e747d" stroke-width="2"/>
+          <rect x="50" y="150" width="490" height="257" rx="5" fill="url(#brush)"/>
+          <rect x="50" y="150" width="7" height="257" rx="3" fill="#8e949d" opacity=".55"/>
+          <!-- yellow warning label -->
+          <rect x="186" y="159" width="91" height="45" rx="3" fill="#F5D21E" stroke="#a88f0a"/>
+          <path d="M231 162 l-11 9 h6 v4 h10 v-4 h6z" fill="none" stroke="#222" stroke-width="1.6" stroke-linejoin="round"/>
+          <g stroke="#222" stroke-width="1.7" stroke-linecap="round"><line x1="194" y1="181" x2="270" y2="181"/><line x1="196" y1="187" x2="268" y2="187"/><line x1="194" y1="193" x2="270" y2="193"/><line x1="200" y1="199" x2="262" y2="199"/></g>
+          <!-- fan grille -->
+          <circle cx="155" cy="324" r="57" fill="#B9BEC6" stroke="#69707a" stroke-width="2"/>
+          <g fill="none" stroke="#15171b" stroke-width="11" stroke-linecap="round">
+            <path d="M197.5 335.4 A44 44 0 0 1 166.4 366.5"/>
+            <path d="M143.6 366.5 A44 44 0 0 1 112.5 335.4"/>
+            <path d="M112.5 312.6 A44 44 0 0 1 143.6 281.5"/>
+            <path d="M166.4 281.5 A44 44 0 0 1 197.5 312.6"/>
+          </g>
+          <circle cx="155" cy="324" r="27" fill="#C9CED5" stroke="#15171b" stroke-width="5"/>
+          <g fill="#15171b"><circle cx="155" cy="324" r="4.5"/><circle cx="155" cy="311" r="4"/><circle cx="155" cy="337" r="4"/><circle cx="142" cy="324" r="4"/><circle cx="168" cy="324" r="4"/></g>
+          <g fill="url(#screwg)" stroke="#6e747d"><circle cx="101" cy="267" r="6"/><circle cx="213" cy="381" r="6"/></g>
+          <!-- vents -->
+          <g fill="#15171b">
+            <rect x="406" y="177" width="11" height="77" rx="5.5"/><rect x="425" y="177" width="11" height="77" rx="5.5"/><rect x="444" y="177" width="11" height="77" rx="5.5"/>
+            <rect x="406" y="298" width="11" height="77" rx="5.5"/><rect x="425" y="298" width="11" height="77" rx="5.5"/><rect x="444" y="298" width="11" height="77" rx="5.5"/>
+          </g>
+          <!-- label strip -->
+          <rect x="468" y="150" width="41" height="257" fill="#EEF0F2" stroke="#b7bcc4"/>
+          <g fill="#222">
+            <text transform="translate(477,345) rotate(-90)" font-size="6">INPUT: 100-120V~/6.8A  200-240V~/3.4A  50/60Hz</text>
+            <text transform="translate(486,345) rotate(-90)" font-size="6">OUTPUT: 5V 60A   MADE IN CHINA</text>
+            <text class="ar" transform="translate(500,404) rotate(-90)" font-size="12" font-weight="800">LRS-350-5</text>
+          </g>
+          <rect x="469" y="372" width="9" height="30" fill="#d92027"/>
+          <g font-size="10" font-weight="700" fill="#222" text-anchor="middle">
+            <text x="502" y="186">L</text><text x="502" y="206">N</text>
+            <path d="M502 214 v6 M496 220 h12 M498 223.5 h8 M500.5 227 h3" stroke="#222" stroke-width="1.4" fill="none"/>
+            <text x="502" y="266">&#8722;V</text><text x="502" y="326">+V</text>
+          </g>
+          <!-- terminal block + tab -->
+          <rect x="509" y="360" width="32" height="46" fill="#E6DDA8" stroke="#a89d63"/>
+          <rect x="509" y="168" width="32" height="190" rx="3" fill="url(#blk)"/>
+          <g stroke="#3a3d44" stroke-width="2"><line x1="509" y1="192" x2="541" y2="192"/><line x1="509" y1="212" x2="541" y2="212"/><line x1="509" y1="232" x2="541" y2="232"/><line x1="509" y1="252" x2="541" y2="252"/><line x1="509" y1="272" x2="541" y2="272"/><line x1="509" y1="292" x2="541" y2="292"/><line x1="509" y1="312" x2="541" y2="312"/><line x1="509" y1="332" x2="541" y2="332"/></g>
+          <circle cx="517" cy="392" r="4.5" fill="#3CDC5A" stroke="#1c8a34"/>
+          <!-- AC voltage switch (shown on top face so it can be seen) -->
+          <g id="sw">
+            <rect x="190" y="216" width="64" height="26" rx="13" fill="#B9BEC7" stroke="#4d535d" stroke-width="2"/>
+            <circle id="swKnob" cx="203" cy="229" r="9" fill="#14161C"/>
+            <text id="sw115" x="203" y="260" font-size="12" font-weight="700" fill="#14161C" text-anchor="middle">115</text>
+            <text id="sw230" x="241" y="260" font-size="12" font-weight="700" fill="#14161C" text-anchor="middle">230</text>
+          </g>
+        </g>
+
+        <!-- ===== Great Wall XSP-EP250WV38B (input left, output right) ===== -->
+        <g id="art-gw">
+          <ellipse cx="405" cy="378" rx="235" ry="8" fill="#000" opacity=".28" filter="url(#blur)"/>
+          <rect x="185" y="195" width="440" height="176" rx="6" fill="url(#metal)" stroke="#6e747d" stroke-width="2"/>
+          <rect x="185" y="195" width="440" height="176" rx="6" fill="url(#brush)"/>
+          <g fill="#5d636c"><circle cx="193" cy="206" r="3.5"/><circle cx="193" cy="360" r="3.5"/><rect x="578" y="364" width="24" height="4" rx="2"/><rect x="578" y="198" width="24" height="4" rx="2"/></g>
+          <!-- caution label -->
+          <rect x="195" y="222" width="66" height="128" rx="3" fill="#F5D21E" stroke="#a88f0a"/>
+          <text class="ar" transform="translate(212,304) rotate(-90)" font-size="15" font-weight="800" fill="#222">CAUTION!</text>
+          <g fill="#222"><text transform="translate(228,304) rotate(-90)" font-size="6">HIGH VOLTAGE INSIDE</text><text transform="translate(237,304) rotate(-90)" font-size="6">DO NOT REMOVE THIS COVER</text><text transform="translate(246,304) rotate(-90)" font-size="6">QUALIFIED SERVICE ONLY</text></g>
+          <path d="M249 313 L259 333 H239 Z" fill="#F5D21E" stroke="#222" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="M250 318 l-3 7 h4 l-2 6" fill="none" stroke="#c4201c" stroke-width="1.5" stroke-linejoin="round"/>
+          <!-- white label -->
+          <rect x="263" y="230" width="299" height="103" rx="2" fill="#F4F5F6" stroke="#c9ccd1"/>
+          <text class="ar" x="334" y="252" font-size="18" font-weight="800" font-style="italic" fill="#2a3550">Great Wall</text>
+          <text x="438" y="250" font-size="7" font-weight="700" fill="#222">POWER SUPPLY</text>
+          <g font-size="6.8" fill="#222">
+            <text x="334" y="264">MODEL: XSP-EP250WV38B</text>
+            <text x="334" y="272">INPUT: 100-120V~3A 50/60Hz</text>
+            <text x="334" y="280">OUTPUT: +3.8V 35A</text>
+            <text x="334" y="288">INPUT: 200-240V~2A 50/60Hz</text>
+            <text x="334" y="296">OUTPUT: +3.8V 50A</text>
+          </g>
+          <g fill="none" stroke="#333" stroke-width="1"><circle cx="340" cy="309" r="5.5"/><circle cx="356" cy="309" r="5.5"/><rect x="368" y="304" width="14" height="10" rx="2"/><circle cx="394" cy="309" r="5.5"/><circle cx="410" cy="309" r="5.5"/></g>
+          <text x="334" y="326" font-size="4.6" fill="#444">China Greatwall Technology Group Co., Ltd.</text>
+          <g font-size="8" fill="#222">
+            <text class="ar" x="272" y="274" font-size="10.5" font-weight="700">INPUT</text>
+            <circle cx="272" cy="252" r="2.3"/><text x="279" y="255">GND</text>
+            <circle cx="272" cy="287" r="2.3"/><text x="279" y="290">ACN</text>
+            <circle cx="272" cy="303" r="2.3"/><text x="279" y="306">ACL</text>
+          </g>
+          <g font-size="8" fill="#222" text-anchor="end">
+            <circle cx="526" cy="258" r="2.3"/><text x="520" y="261">+V</text>
+            <circle cx="526" cy="269" r="2.3"/><text x="520" y="272">+V</text>
+            <circle cx="526" cy="295" r="2.3"/><text x="520" y="298">&#8722;V</text>
+            <circle cx="526" cy="306" r="2.3"/><text x="520" y="309">&#8722;V</text>
+          </g>
+          <text class="ar" x="523" y="285" font-size="9" font-weight="700" fill="#222" text-anchor="middle">OUTPUT</text>
+          <rect x="548" y="252" width="14" height="86" fill="#fff" stroke="#c9ccd1"/>
+          <rect x="551" y="258" width="8" height="64" fill="url(#bars)"/>
+          <!-- input terminals (left edge) -->
+          <rect x="167" y="236" width="31" height="94" rx="3" fill="url(#blk)"/>
+          <g stroke="#3a3d44" stroke-width="2"><line x1="167" y1="268" x2="198" y2="268"/><line x1="167" y1="298" x2="198" y2="298"/></g>
+          <!-- output terminals (right edge) + trim access hole -->
+          <rect x="626" y="222" width="32" height="126" rx="3" fill="url(#blk)"/>
+          <g stroke="#3a3d44" stroke-width="2"><line x1="626" y1="252" x2="658" y2="252"/><line x1="626" y1="286" x2="658" y2="286"/><line x1="626" y1="320" x2="658" y2="320"/></g>
+          <circle cx="598" cy="238" r="17" fill="#2a2c30" stroke="#6e747d" stroke-width="2"/>
+        </g>
+
+        <!-- ===== Mean Well UHP-350-4.2 (input left, output right) ===== -->
+        <g id="art-uhp">
+          <ellipse cx="400" cy="358" rx="250" ry="8" fill="#000" opacity=".28" filter="url(#blur)"/>
+          <rect x="170" y="215" width="460" height="135" rx="6" fill="url(#metal)" stroke="#6e747d" stroke-width="2"/>
+          <g stroke="#8f959e" stroke-width="1.5" opacity=".9">
+            <line x1="172" y1="219" x2="628" y2="219"/><line x1="172" y1="223" x2="628" y2="223"/><line x1="172" y1="227" x2="628" y2="227"/>
+            <line x1="172" y1="338" x2="628" y2="338"/><line x1="172" y1="342" x2="628" y2="342"/><line x1="172" y1="346" x2="628" y2="346"/>
+          </g>
+          <rect x="180" y="232" width="440" height="102" rx="3" fill="#C6CBD2" stroke="#8b919a"/>
+          <rect x="180" y="232" width="440" height="102" rx="3" fill="url(#hexp)"/>
+          <!-- label -->
+          <rect x="196" y="298" width="140" height="32" rx="2" fill="#F4F5F6" stroke="#c9ccd1"/>
+          <rect x="200" y="302" width="26" height="14" fill="#d92027"/>
+          <text class="ar" x="213" y="312.5" font-size="8" font-weight="800" font-style="italic" fill="#fff" text-anchor="middle">MW</text>
+          <g font-size="5.4" fill="#222"><text x="232" y="309">MODEL: UHP-350-4.2</text><text x="232" y="316">INPUT: 100-240V  3.8A</text><text x="232" y="323">OUTPUT: 4.2V  71A</text></g>
+          <rect x="296" y="302" width="34" height="8" fill="url(#bars)"/>
+          <!-- input terminals (left end) -->
+          <rect x="146" y="229" width="26" height="108" rx="3" fill="url(#blk)"/>
+          <g stroke="#3a3d44" stroke-width="2"><line x1="146" y1="267" x2="172" y2="267"/><line x1="146" y1="300" x2="172" y2="300"/></g>
+          <!-- output terminals (right end) -->
+          <rect x="628" y="222" width="28" height="120" rx="3" fill="url(#blk)"/>
+          <g stroke="#3a3d44" stroke-width="2"><line x1="628" y1="257" x2="656" y2="257"/><line x1="628" y1="283" x2="656" y2="283"/><line x1="628" y1="309" x2="656" y2="309"/></g>
+        </g>
+
+        <g id="screws"></g>
+        <g id="wires"></g>
+        <text id="glAC" class="gl gl-ac ar" font-size="16" font-weight="700" fill="currentColor">Mains in</text>
+        <text id="glDC" class="gl gl-dc ar" font-size="16" font-weight="700" fill="currentColor">DC out</text>
+
+        <!-- trim pot -->
+        <g id="trimG">
+          <circle id="trimDisc" r="10" fill="#D9A441" stroke="#3b2c07" stroke-width="1.5"/>
+          <g id="trimKnob"><line id="trimSlot" x1="-6.5" y1="0" x2="6.5" y2="0" stroke="#2a1f05" stroke-width="3" stroke-linecap="round"/></g>
+        </g>
+
+        <!-- highlight rings -->
+        <g id="ringSw" opacity="0"><rect x="-52" y="-27" width="104" height="54" rx="27" fill="none" stroke="#fff" stroke-width="7"/><rect x="-52" y="-27" width="104" height="54" rx="27" fill="none" stroke="#14161C" stroke-width="3"/></g>
+        <g id="ringTr" opacity="0"><circle r="26" fill="none" stroke="#fff" stroke-width="7"/><circle r="26" fill="none" stroke="#14161C" stroke-width="3"/></g>
+
+        <!-- probes -->
+        <g mask="url(#fadeM)">
+        <g id="probeB" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#15161a" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#15161a" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        <g id="probeR" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#E02B2B" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#E02B2B" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        </g>
+
+        <!-- live badge -->
+        <g id="live" opacity="0">
+          <rect x="18" y="108" width="154" height="36" rx="18" fill="#14130C"/>
+          <circle id="liveDot" cx="40" cy="126" r="7" fill="#FFC800"/>
+          <text x="56" y="132" fill="#FFC800" font-size="17" font-weight="700">Mains live</text>
+        </g>
+      </svg>
+    </div>
+
+    <aside id="meter" data-state="idle" aria-label="Multimeter reading">
+      <div class="mode">
+        <div class="seg" id="seg"><i id="segKnob"></i><span id="sAC" class="act">AC volts</span><span id="sDC">DC volts</span></div>
+        <span class="note">Example readings</span>
+      </div>
+      <div class="read"><span id="num">---</span><span id="unit"></span></div>
+      <div id="status" aria-live="polite">Not measuring</div>
+      <div class="gauge" id="gauge" aria-hidden="true">
+        <div class="bar"></div><div id="zone"></div><div id="marker"></div>
+        <span class="tick" id="tickLo"></span><span class="tick" id="tickHi"></span>
+      </div>
+      <div id="rule"></div>
+      <label class="slide">Drag to try other readings
+        <input id="slider" type="range" min="0" max="1" step="0.01" value="0" disabled>
+      </label>
+      <div id="mains" style="opacity:0;visibility:hidden"><span>Supply</span>
+        <button data-m="120" aria-pressed="true">120 V</button><button data-m="240" aria-pressed="false">240 V</button>
+      </div>
+    </aside>
+
+    <div id="verdict">
+      <div class="vh" data-row="0">Yes: readings in range, no fault</div>
+      <div class="vh" data-row="0">No: out of range, faulty</div>
+      <div class="conn" data-row="c0"></div><div class="conn" data-row="c0"></div>
+      <div class="vc pass" data-row="1">Label it NFF on documentation tape, with the ticket number.</div>
+      <div class="vc fail" data-row="1">Note the fault, plus the ticket or sales order number.</div>
+      <div class="conn" data-row="c1"></div><div class="conn" data-row="c1"></div>
+      <div class="vc merge" data-row="2">Record it in iGO under RMA Returned Parts, then on the Zoho Desk ticket. Check Move To is set to the refurbished inventory location. Mark the iGO order complete.</div>
+      <div class="conn" data-row="c2"></div><div class="conn" data-row="c2"></div>
+      <div class="vc pass" data-row="3">Shelve it as a refurbished part.</div>
+      <div class="vc fail" data-row="3">Crate it for the manufacturer's warranty replacement.</div>
+    </div>
+  </main>
+
+  <footer>
+    <p id="cap" aria-live="polite"></p>
+    <div id="ctl">
+      <button class="btn" id="bBack">Back</button>
+      <button class="btn" id="bReplay">Replay step</button>
+      <button class="btn" id="bAuto" aria-pressed="false">Auto-play</button>
+      <button class="btn go" id="bNext">Next</button>
+    </div>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+const NS='http://www.w3.org/2000/svg';
+const mk=(tag,attrs,parent)=>{const e=document.createElementNS(NS,tag);Object.keys(attrs||{}).forEach(k=>e.setAttribute(k,attrs[k]));if(parent)parent.appendChild(e);return e;};
+const root=document.documentElement;
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- data: everything the animation needs comes from here ---------- */
+const MODELS={
+  lrs:{key:'lrs',name:'LRS-350-5',gen:'Gen 1 & 2',nom:5,lo:4.8,hi:5.5,tdec:1,start:5.62,sw:true,trim:'the small pot by the green LED'},
+  gw:{key:'gw',name:'XSP-EP250WV38B',gen:'Early Gen 3',nom:3.8,lo:3.75,hi:3.85,tdec:2,start:3.71,sw:false,trim:'center right'},
+  uhp:{key:'uhp',name:'UHP-350-4.2',gen:'Later Gen 3',nom:3.8,lo:3.75,hi:3.85,tdec:2,start:3.71,sw:false,trim:'center right'}
+};
+/* terminal positions (where probes land and wires attach), which side each wire group exits, trim pot, etc. */
+const GEO={
+  lrs:{term:{l:[526,182],n:[526,202],g:[526,222],neg:[526,262],pos:[526,322]},side:{ac:'right',dc:'right'},ex:{ac:660,dc:660},
+       gl:{ac:[774,202,'middle',-90],dc:[774,292,'middle',-90]},lf:14,br:{ac:[748,174,230],dc:[748,254,330]},trim:[517,371],trimR:8,trimFill:'#F1E9C9',trimStroke:'#8a7f4a',slot:'#6b5f2e',ringR:22,
+       swRing:[222,229],
+       screws:[[526,182,'l'],[526,202,'n'],[526,222,'g'],[526,242],[526,262,'neg'],[526,282],[526,302],[526,322,'pos'],[526,342]],sr:7.5},
+  gw:{term:{g:[182,253],n:[182,283],l:[182,313],neg:[642,306],pos:[642,266]},side:{ac:'left',dc:'right'},ex:{ac:95,dc:688},
+       gl:{ac:[85,232,'end'],dc:[698,246,'start']},trim:[598,238],trimR:11,trimFill:'#D9A441',trimStroke:'#3b2c07',slot:'#2a1f05',ringR:28,
+       screws:[[182,253,'g'],[182,283,'n'],[182,313,'l'],[642,238],[642,266,'pos'],[642,306,'neg'],[642,334]],sr:8},
+  uhp:{term:{g:[159,250],n:[159,283],l:[159,316],neg:[642,270],pos:[642,296]},side:{ac:'left',dc:'right'},ex:{ac:95,dc:688},
+       gl:{ac:[85,228,'end'],dc:[698,247,'start']},trim:[604,243],trimR:10,trimFill:'#2F63DB',trimStroke:'#14306e',slot:'#0c1d46',ringR:26,
+       screws:[[159,250,'g'],[159,283,'n'],[159,316,'l'],[642,244],[642,270,'neg'],[642,296,'pos'],[642,322]],sr:8.5}
+};
+const WIRES=[
+  {k:'g',c:'#1FA34A',label:'Ground',grp:'ac'},
+  {k:'n',c:'#FFFFFF',label:'Neutral',grp:'ac'},
+  {k:'l',c:'#111111',label:'Load',grp:'ac'},
+  {k:'neg',c:'#111111',label:'Negative',grp:'dc'},
+  {k:'pos',c:'#E02B2B',label:'Positive',grp:'dc'}
+];
+const ORDER=['intro','wires','switch','ac','dc','trim','paper'];
+const TITLES={intro:'Why test',wires:'Five wires',switch:'Voltage switch',ac:'Incoming AC',dc:'DC output',trim:'Fine-tune',paper:'Paperwork'};
+const THEME_OF={intro:'blue',wires:'blue',switch:'yellow',ac:'yellow',dc:'blue',trim:'blue',paper:'paper'};
+const THEMES={blue:{bg:'#2336D8',fg:'#F4F6FF'},yellow:{bg:'#FFC800',fg:'#14130C'},paper:{bg:'#E9ECF3',fg:'#14161C'}};
+const CAP={
+  intro:m=>'Many faults look like a bad power supply. Two readings settle it: the AC going in and the DC coming out.',
+  wires:m=>'Five wires to know. Three bring mains in: green ground, white neutral, black load. Two carry DC out: red positive, black negative.',
+  switch:m=>'Before power goes on, check the side switch: 115 for a 120 V supply, 230 for 240 V.',
+  ac:m=>'Meter on AC volts. Black probe on the white neutral, red probe on the black load. Mains is live, so touch only the terminals. A 120 V supply should read 114 to 126.',
+  dc:m=>`Now switch the meter to DC volts. Black probe on negative, red on positive. This supply should read ${m.lo} to ${m.hi} V.`,
+  trim:m=>`Out of range, or not close to ${m.nom} V? Turn the trim screw (${m.trim}) until the reading is as close to ${m.nom} V as you can get it.`,
+  paper:m=>'Tag it, log it, then send it where it belongs: the shelf if it is good, the warranty crate if it is faulty.'
+};
+const LEAN=62, PD=150;
+const ACREAD={120:120.4,240:239.1};
+
+let model=MODELS.lrs, steps=[], cur=0, tl=null, auto=false, autoCall=null, MAINS=120, builtFor=null;
+const stepsFor=m=>ORDER.filter(id=>id!=='switch'||m.sw);
+const geo=()=>GEO[model.key];
+
+/* ---------- theme (scene colour field) ---------- */
+let theme={...THEMES.blue};
+const hex=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+const toHex=s=>s.startsWith('#')?s:'#'+s.match(/\d+/g).map(v=>(+v).toString(16).padStart(2,'0')).join('');
+const mix=(a,b,t)=>{const x=hex(toHex(a)),y=hex(toHex(b));return 'rgb('+x.map((v,i)=>Math.round(v+(y[i]-v)*t)).join(',')+')';};
+function applyTheme(){root.style.setProperty('--bg',theme.bg);root.style.setProperty('--fg',theme.fg);}
+function themeTween(t,key,pos){
+  const from={...theme}, to=THEMES[key], p={t:0};
+  t.to(p,{t:1,duration:reduce?0.01:0.7,ease:'power2.inOut',onUpdate(){
+    theme={bg:mix(from.bg,to.bg,p.t),fg:mix(from.fg,to.fg,p.t)}; applyTheme();
+  },onComplete(){theme={...to};applyTheme();}},pos);
+}
+applyTheme();
+
+/* ---------- meter / gauge ---------- */
+const meter=$('#meter'),num=$('#num'),unitEl=$('#unit'),statusEl=$('#status'),zone=$('#zone'),marker=$('#marker'),
+      tickLo=$('#tickLo'),tickHi=$('#tickHi'),rule=$('#rule'),slider=$('#slider');
+const G={lo:0,hi:1,min:0,max:1,dec:1,unit:'V'}; const R={v:null}; const P={val:0};
+const pct=v=>Math.max(0,Math.min(100,(v-G.min)/(G.max-G.min)*100));
+const fmt=(v,d)=>v.toFixed(d);
+const acCfg=m=>m===240?{lo:216,hi:264,dec:1,tdec:0,unit:'V AC'}:{lo:114,hi:126,dec:1,tdec:0,unit:'V AC'};
+const dcCfg=()=>({lo:model.lo,hi:model.hi,dec:2,tdec:model.tdec,unit:'V DC'});
+function configureGauge(c){
+  const span=c.hi-c.lo;
+  Object.assign(G,{lo:c.lo,hi:c.hi,min:c.lo-span*0.9,max:c.hi+span*0.9,dec:c.dec,unit:c.unit});
+  zone.style.left=pct(c.lo)+'%'; zone.style.width=(pct(c.hi)-pct(c.lo))+'%';
+  tickLo.style.left=pct(c.lo)+'%'; tickHi.style.left=pct(c.hi)+'%';
+  tickLo.textContent=fmt(c.lo,c.tdec); tickHi.textContent=fmt(c.hi,c.tdec);
+  rule.textContent='Pass: '+fmt(c.lo,c.tdec)+' to '+fmt(c.hi,c.tdec)+' '+c.unit;
+  slider.min=G.min; slider.max=G.max; slider.step=(G.max-G.min)/300;
+}
+function render(v){
+  R.v=v;
+  if(v==null){num.textContent='---';unitEl.textContent='';meter.dataset.state='idle';statusEl.textContent='Not measuring';marker.style.opacity=0;return;}
+  marker.style.opacity=1; marker.style.left=pct(v)+'%';
+  num.textContent=fmt(v,G.dec); unitEl.textContent=G.unit;
+  const ok=v>=G.lo-1e-9&&v<=G.hi+1e-9;
+  meter.dataset.state=ok?'pass':'fail';
+  statusEl.textContent=ok?'In range':(v<G.lo?'Too low':'Too high');
+  slider.value=v;
+}
+function setMode(m,animate){
+  gsap.to('#segKnob',{xPercent:m==='ac'?0:100,duration:animate&&!reduce?0.35:0,ease:'power2.inOut'});
+  $('#sAC').classList.toggle('act',m==='ac'); $('#sDC').classList.toggle('act',m==='dc');
+}
+function trimRot(v){gsap.set('#trimKnob',{rotation:(model.start-v)/(model.start-model.nom)*240});}
+slider.addEventListener('input',()=>{
+  gsap.killTweensOf(P); const v=+slider.value; render(v);
+  if(steps[cur]&&steps[cur].id==='trim') trimRot(v);
+});
+
+/* ---------- building the model-specific bits of the drawing ---------- */
+function buildScrews(){
+  const box=$('#screws'); box.innerHTML='';
+  Object.keys(GEO).forEach(key=>{
+    const g=GEO[key], parent=mk('g',{id:'scr-'+key},box);
+    g.screws.forEach(s=>{
+      const grp=mk('g',{class:'scr',id:s[2]?key+'-t-'+s[2]:null},parent); if(!s[2])grp.removeAttribute('id');
+      mk('circle',{cx:s[0],cy:s[1],r:g.sr,fill:s[3]||'url(#screwg)',stroke:'#4b5058','stroke-width':1.5},grp);
+      mk('line',{x1:s[0]-g.sr*.6,y1:s[1],x2:s[0]+g.sr*.6,y2:s[1],stroke:'#3c4047','stroke-width':2.2,'stroke-linecap':'round',transform:'rotate(35 '+s[0]+' '+s[1]+')'},grp);
+    });
+  });
+}
+function buildWires(){
+  if(builtFor===model.key)return; builtFor=model.key;
+  const g=geo(), box=$('#wires'); box.innerHTML='';
+  WIRES.forEach(w=>{
+    const [x,y]=g.term[w.k], dir=g.side[w.grp]==='left'?-1:1, ex=g.ex[w.grp];
+    const grp=mk('g',{class:'wire k-'+w.grp},box);
+    mk('line',{x1:x,y1:y,x2:ex,y2:y,stroke:'#8b919b','stroke-width':13,'stroke-linecap':'round'},grp);
+    mk('line',{x1:x,y1:y,x2:ex,y2:y,stroke:w.c,'stroke-width':7,'stroke-linecap':'round'},grp);
+    const t=mk('text',{class:'wlabel k-'+w.grp,x:ex+dir*10,y:y+6,'text-anchor':dir>0?'start':'end','font-size':g.lf||17,'font-weight':700,fill:'currentColor'},box);
+    t.textContent=w.label;
+    gsap.set(grp,{svgOrigin:x+' '+y});
+  });
+  $$('.gl-br').forEach(e=>e.remove());
+  ['ac','dc'].forEach(k=>{
+    const e=$(k==='ac'?'#glAC':'#glDC'), p=g.gl[k];
+    e.setAttribute('x',p[0]);e.setAttribute('y',p[1]);e.setAttribute('text-anchor',p[2]);
+    if(p[3]) e.setAttribute('transform','rotate('+p[3]+' '+p[0]+' '+p[1]+')'); else e.removeAttribute('transform');
+    if(g.br&&g.br[k]){const b=g.br[k]; mk('path',{class:'gl gl-br gl-'+k,d:'M'+(b[0]-6)+' '+b[1]+' H'+b[0]+' V'+b[2]+' H'+(b[0]-6),fill:'none',stroke:'currentColor','stroke-width':2.5,'stroke-linecap':'round','stroke-linejoin':'round'},box);}
+  });
+}
+function setPlate(){
+  Object.keys(MODELS).forEach(k=>{gsap.set('#art-'+k,{autoAlpha:k===model.key?1:0});gsap.set('#scr-'+k,{autoAlpha:k===model.key?1:0});});
+  const g=geo();
+  $('#trimDisc').setAttribute('r',g.trimR); $('#trimDisc').setAttribute('fill',g.trimFill); $('#trimDisc').setAttribute('stroke',g.trimStroke);
+  const sl=$('#trimSlot'); sl.setAttribute('x1',-g.trimR*.65); sl.setAttribute('x2',g.trimR*.65); sl.setAttribute('stroke',g.slot);
+  $$('#ringTr circle').forEach(c=>c.setAttribute('r',g.ringR));
+  buildWires();
+}
+function renderChips(){
+  const box=$('#models'); box.innerHTML='';
+  Object.values(MODELS).forEach(m=>{
+    const b=document.createElement('button'); b.className='chip'; b.setAttribute('aria-pressed',m===model);
+    b.innerHTML='<b>'+m.name+'</b><small>'+m.gen+'</small>'; b.onclick=()=>setModel(m.key); box.appendChild(b);
+  });
+}
+function setModel(key){
+  const prev=steps[cur]?steps[cur].id:'intro'; model=MODELS[key]; steps=stepsFor(model);
+  let i=steps.indexOf(prev); if(i<0)i=steps.indexOf('ac'); renderChips(); go(i);
+}
+function renderRail(){
+  const ol=$('#rail ol'); ol.innerHTML='';
+  steps.forEach((id,i)=>{
+    const li=document.createElement('li'); const b=document.createElement('button');
+    b.className=i===cur?'on':''; if(i===cur)b.setAttribute('aria-current','step');
+    b.innerHTML='<span class="n">'+(i+1)+'</span><span class="t">'+TITLES[id]+'</span>'; b.onclick=()=>go(i);
+    li.appendChild(b); ol.appendChild(li);
+  });
+}
+
+/* ---------- one-time SVG setup ---------- */
+const probeB=$('#probeB'),probeR=$('#probeR');
+gsap.set([probeB,probeR],{transformOrigin:'0px 0px'});
+gsap.set(['#ringSw','#ringTr'],{transformOrigin:'0px 0px'});
+gsap.set('#ringSw',{x:222,y:229});
+gsap.set('#segKnob',{xPercent:0});
+buildScrews();
+if(!reduce) gsap.to('#liveDot',{opacity:.25,duration:.5,yoyo:true,repeat:-1,ease:'sine.inOut'});
+
+/* probes come in along their own axis, from the side of the terminal that faces the body */
+const sideOf=k=>geo().side[(k==='neg'||k==='pos')?'dc':'ac'];
+const leanOf=k=>sideOf(k)==='left'?-LEAN:LEAN;
+const axis=th=>[-Math.sin(th*Math.PI/180),Math.cos(th*Math.PI/180)];
+const at=k=>({x:geo().term[k][0],y:geo().term[k][1],rotation:leanOf(k)});
+const parked=k=>{const a=axis(leanOf(k));return {x:geo().term[k][0]+a[0]*PD,y:geo().term[k][1]+a[1]*PD,rotation:leanOf(k)};};
+const setProbe=(el,k,shown)=>gsap.set(el,Object.assign(shown?at(k):parked(k),{autoAlpha:shown?1:0}));
+const swLabels=v=>{gsap.to('#sw115',{opacity:v===115?1:.35,duration:.3});gsap.to('#sw230',{opacity:v===230?1:.35,duration:.3});};
+const termSel=k=>'#'+model.key+'-t-'+k;
+const pulse=(sels,atTime,t)=>t.fromTo(sels,{scale:1},{scale:1.45,yoyo:true,repeat:1,duration:.17,transformOrigin:'50% 50%',ease:'power2.out'},atTime);
+
+/* ---------- set the stage to the state each step expects to start from ---------- */
+function prep(id){
+  const pos=ORDER.indexOf(id), g=geo();
+  setPlate();
+  gsap.set('#art-'+model.key,{autoAlpha:pos>0?1:0,y:0});
+  gsap.set('#scr-'+model.key,{autoAlpha:pos>0?1:0,y:0});
+  gsap.set('.scr',{scale:1});
+  gsap.set('#trimG',{x:g.trim[0],y:g.trim[1],autoAlpha:pos>0?1:0});
+  gsap.set('#ringTr',{x:g.trim[0],y:g.trim[1],autoAlpha:0});
+  gsap.set('#ringSw',{x:g.swRing?g.swRing[0]:222,y:g.swRing?g.swRing[1]:229,autoAlpha:0});
+  gsap.set(['#plateWrap','#meter'],{autoAlpha:1,x:0,y:0});
+  gsap.set('#verdict',{autoAlpha:0});
+  const wv=pos>1;
+  gsap.set('.wire',{scaleX:wv?1:0,opacity:1,visibility:'visible'});
+  gsap.set('.wlabel',{autoAlpha:wv?1:0,y:0,opacity:wv?1:0});
+  gsap.set('.gl',{autoAlpha:wv?1:0});
+  gsap.set('#swKnob',{x:MAINS===240?38:0}); gsap.set('#sw115',{opacity:MAINS===240?.35:1}); gsap.set('#sw230',{opacity:MAINS===240?1:.35});
+  gsap.set('#live',{autoAlpha:id==='dc'?1:0,y:0});
+  gsap.set('#mains',{autoAlpha:0});
+  $$('#mains button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.m===MAINS));
+  gsap.set('#trimKnob',{rotation:0});
+  slider.disabled=true; gsap.killTweensOf(P);
+  if(id==='dc'){setProbe(probeB,'n',true);setProbe(probeR,'l',true);}
+  else if(id==='trim'){setProbe(probeB,'neg',true);setProbe(probeR,'pos',true);}
+  else{setProbe(probeB,'n',false);setProbe(probeR,'l',false);}
+  if(id==='ac'){configureGauge(acCfg(MAINS));render(null);setMode('dc',false);}
+  else if(id==='dc'){configureGauge(acCfg(MAINS));render(ACREAD[MAINS]);setMode('ac',false);}
+  else if(id==='trim'){configureGauge(dcCfg());render(model.start);trimRot(model.start);setMode('dc',false);}
+  else{configureGauge(acCfg(120));render(null);setMode('ac',false);}
+}
+
+/* ---------- scenes ---------- */
+const SCENES={
+  intro(t){
+    const art='#art-'+model.key, scr='#scr-'+model.key;
+    t.fromTo([art,scr],{y:50,autoAlpha:0},{y:0,autoAlpha:1,duration:.9,ease:'power3.out'},.2);
+    t.from(scr+' .scr',{scale:0,transformOrigin:'50% 50%',duration:.4,stagger:.06,ease:'back.out(2.2)'},.8);
+    t.fromTo('#trimG',{autoAlpha:0},{autoAlpha:1,duration:.4},1.2);
+    t.fromTo('#meter',{x:40,autoAlpha:0},{x:0,autoAlpha:1,duration:.7,ease:'power3.out'},.5);
+  },
+  wires(t){
+    t.fromTo('.wire',{scaleX:0},{scaleX:1,duration:.55,stagger:.12,ease:'power3.out'},.3);
+    t.fromTo('.wlabel',{autoAlpha:0,y:6},{autoAlpha:1,y:0,duration:.4,stagger:.12},.55);
+    t.fromTo('.gl-ac',{autoAlpha:0,y:6},{autoAlpha:1,y:0,duration:.4},1.8);
+    t.to('.k-dc',{opacity:.2,duration:.3},1.7);
+    t.to('.k-dc',{opacity:1,duration:.3},3.0);
+    t.to('.k-ac',{opacity:.2,duration:.3},3.0);
+    t.fromTo('.gl-dc',{autoAlpha:0,y:6},{autoAlpha:1,y:0,duration:.4},3.1);
+    t.to('.k-ac',{opacity:1,duration:.3},4.4);
+  },
+  switch(t){
+    t.fromTo('#ringSw',{scale:.5,autoAlpha:0},{scale:1,autoAlpha:1,duration:.5,ease:'back.out(2)'},.4);
+    t.to('#ringSw',{scale:1.1,yoyo:true,repeat:5,duration:.4,ease:'sine.inOut'},.9);
+    t.to('#swKnob',{x:38,duration:.6,ease:'power2.inOut'},1.3);
+    t.call(()=>swLabels(230),null,1.3);
+    t.to('#swKnob',{x:0,duration:.6,ease:'power2.inOut'},3.0);
+    t.call(()=>swLabels(115),null,3.0);
+    t.to('#ringSw',{autoAlpha:0,duration:.3},4.6);
+  },
+  ac(t){
+    t.call(()=>setMode('ac',true),null,.4);
+    t.fromTo('#live',{autoAlpha:0,y:-10},{autoAlpha:1,y:0,duration:.4},.9);
+    t.to(probeB,Object.assign(at('n'),{autoAlpha:1,duration:1.1,ease:'power3.out'}),1.3);
+    t.to(probeR,Object.assign(at('l'),{autoAlpha:1,duration:1.1,ease:'power3.out'}),1.5);
+    pulse([termSel('n'),termSel('l')],2.55,t);
+    t.fromTo(P,{val:0},{val:ACREAD[MAINS],duration:1.5,ease:'power3.out',onUpdate:()=>render(P.val)},2.7);
+    t.fromTo('#mains',{autoAlpha:0,y:8},{autoAlpha:1,y:0,duration:.4},4.3);
+  },
+  dc(t){
+    t.to('#live',{autoAlpha:0,duration:.3},.2);
+    t.to(probeB,Object.assign(parked('n'),{autoAlpha:0,duration:.6,ease:'power2.in'}),.3);
+    t.to(probeR,Object.assign(parked('l'),{autoAlpha:0,duration:.6,ease:'power2.in'}),.3);
+    t.call(()=>{setMode('dc',true);configureGauge(dcCfg());render(null);},null,.9);
+    t.set(probeB,Object.assign(parked('neg'),{autoAlpha:0}),1.0);
+    t.set(probeR,Object.assign(parked('pos'),{autoAlpha:0}),1.0);
+    t.to(probeB,Object.assign(at('neg'),{autoAlpha:1,duration:1.1,ease:'power3.out'}),1.5);
+    t.to(probeR,Object.assign(at('pos'),{autoAlpha:1,duration:1.1,ease:'power3.out'}),1.7);
+    pulse([termSel('neg'),termSel('pos')],2.75,t);
+    t.fromTo(P,{val:0},{val:model.start,duration:1.3,ease:'power3.out',onUpdate:()=>render(P.val)},2.9);
+  },
+  trim(t){
+    t.fromTo('#ringTr',{scale:.5,autoAlpha:0},{scale:1,autoAlpha:1,duration:.5,ease:'back.out(2)'},.4);
+    t.to('#ringTr',{scale:1.15,yoyo:true,repeat:5,duration:.35,ease:'sine.inOut'},.9);
+    const p={t:0};
+    t.to(p,{t:1,duration:3,ease:'power2.inOut',onUpdate(){
+      render(model.start+(model.nom-model.start)*p.t); gsap.set('#trimKnob',{rotation:p.t*240});
+    }},1.4);
+    t.to('#ringTr',{autoAlpha:0,duration:.3},4.7);
+  },
+  paper(t){
+    t.to(['#plateWrap','#meter'],{autoAlpha:0,y:-24,duration:.5,ease:'power2.in'},0);
+    t.set('#verdict',{autoAlpha:1},.5);
+    [0,1,2,3].forEach(r=>{
+      t.fromTo('#verdict [data-row="'+r+'"]',{y:24,autoAlpha:0},{y:0,autoAlpha:1,duration:.5,stagger:.12,ease:'power3.out'},.6+r*.75);
+      if(r<3) t.fromTo('#verdict [data-row="c'+r+'"]',{scaleY:0},{scaleY:1,duration:.3,ease:'none'},.6+r*.75+.45);
+    });
+  }
+};
+
+/* ---------- player ---------- */
+const cap=$('#cap');
+function caption(t,text){
+  cap.innerHTML='';
+  text.split(' ').forEach((w,i,a)=>{const s=document.createElement('span');s.className='w';s.textContent=w+(i<a.length-1?' ':'');cap.appendChild(s);});
+  t.fromTo(cap.children,{y:16,autoAlpha:0},{y:0,autoAlpha:1,duration:.4,stagger:.03,ease:'power2.out'},.2);
+}
+function setBtns(){
+  $('#bBack').disabled=cur===0;
+  $('#bNext').textContent=cur===steps.length-1?'Restart':'Next';
+}
+function done(id){
+  slider.disabled=!['ac','dc','trim'].includes(id);
+  if(autoCall){autoCall.kill();autoCall=null;}
+  if(auto&&cur<steps.length-1) autoCall=gsap.delayedCall(2.8,()=>go(cur+1));
+}
+function go(i){
+  i=Math.max(0,Math.min(steps.length-1,i));
+  if(tl)tl.kill(); if(autoCall){autoCall.kill();autoCall=null;}
+  cur=i; const id=steps[i];
+  renderRail(); prep(id);
+  tl=gsap.timeline({onComplete:()=>done(id)});
+  themeTween(tl,THEME_OF[id],0);
+  caption(tl,CAP[id](model));
+  SCENES[id](tl);
+  setBtns();
+  if(reduce) tl.progress(1);
+}
+
+/* mains toggle (AC step) */
+$$('#mains button').forEach(b=>b.addEventListener('click',()=>{
+  if(steps[cur].id!=='ac'||(tl&&tl.isActive()))return;
+  const m=+b.dataset.m; MAINS=m;
+  $$('#mains button').forEach(x=>x.setAttribute('aria-pressed',+x.dataset.m===m));
+  gsap.killTweensOf(P); P.val=R.v||0;
+  configureGauge(acCfg(m));
+  gsap.to('#swKnob',{x:m===240?38:0,duration:.4}); swLabels(m===240?230:115);
+  gsap.to(P,{val:ACREAD[m],duration:1,ease:'power3.out',onUpdate:()=>render(P.val)});
+}));
+
+$('#bNext').onclick=()=>go(cur===steps.length-1?0:cur+1);
+$('#bBack').onclick=()=>go(cur-1);
+$('#bReplay').onclick=()=>go(cur);
+$('#bAuto').onclick=function(){
+  auto=!auto; this.setAttribute('aria-pressed',auto);
+  if(auto&&tl&&!tl.isActive()&&cur<steps.length-1&&!autoCall) autoCall=gsap.delayedCall(1.2,()=>go(cur+1));
+  if(!auto&&autoCall){autoCall.kill();autoCall=null;}
+};
+document.addEventListener('keydown',e=>{
+  if(e.target&&e.target.type==='range')return;
+  if(e.key==='ArrowRight')go(cur+1); else if(e.key==='ArrowLeft')go(cur-1); else if(e.key==='r'||e.key==='R')go(cur);
+});
+
+steps=stepsFor(model); renderChips(); go(0);
+})();
+</script>
+</body>
+</html>

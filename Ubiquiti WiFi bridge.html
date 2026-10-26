@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ubiquiti WiFi bridge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --panel:#F4F5F8; --panel-ink:#14161C; --pass:#0B8F4D; --fail:#C81E24;
+  --bg:#2336D8; --fg:#F4F6FF;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+}
+:root[data-theme="dark"]{ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+
+*,*::before,*::after{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid currentColor;outline-offset:3px}
+
+#app{min-height:100%;display:grid;grid-template-columns:minmax(0,1fr);gap:18px 28px;padding:18px clamp(14px,3vw,36px) 22px}
+@media (min-width:900px){
+  #app{height:100%;grid-template-columns:190px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+  header,footer{grid-column:1 / -1}
+}
+
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+h1{margin:0;font-family:Archivo,"Helvetica Neue",Arial,sans-serif;font-weight:800;font-stretch:112%;font-size:clamp(20px,2.4vw,28px);letter-spacing:-.01em}
+#models{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;flex-direction:column;align-items:flex-start;border:2px solid currentColor;background:transparent;border-radius:14px;padding:6px 14px;min-height:44px;line-height:1.15;transition:background-color .2s,color .2s}
+.chip b{font-family:Archivo,sans-serif;font-weight:800;font-size:15px}
+.chip small{font-size:12px;opacity:.85}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+#rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+#rail button{display:flex;align-items:baseline;gap:12px;width:100%;text-align:left;background:none;border:0;border-left:5px solid transparent;padding:9px 0 9px 12px;opacity:.5;transition:opacity .2s}
+#rail button:hover{opacity:.85}
+#rail button.on{opacity:1;border-left-color:currentColor}
+#rail .n{font-family:Archivo,sans-serif;font-weight:800;font-size:22px;min-width:1.1em}
+#rail .t{font-size:16px;font-weight:700}
+@media (max-width:899px){
+  #rail ol{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px}
+  #rail button{border-left:0;border-bottom:4px solid transparent;padding:6px 10px;white-space:nowrap;width:auto}
+  #rail button.on{border-bottom-color:currentColor}
+}
+
+#stage{position:relative;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:center}
+@media (min-width:900px){ #stage{grid-template-columns:minmax(0,1fr) 350px} }
+#plateWrap{min-height:0;height:100%;display:flex;align-items:center;justify-content:center}
+#plateWrap svg{width:100%;height:auto;max-height:100%;overflow:hidden}
+svg text{font-family:"Atkinson Hyperlegible",system-ui,sans-serif}
+.ar{font-family:Archivo,"Helvetica Neue",Arial,sans-serif !important}
+
+/* instrument panel */
+#meter{background:var(--panel);color:var(--panel-ink);border:3px solid var(--panel-ink);border-radius:22px;padding:16px 18px 18px;display:flex;flex-direction:column;gap:10px}
+.mode{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{display:inline-block;border:2px solid var(--panel-ink);border-radius:999px;font-weight:700;font-size:14px;padding:5px 12px;background:var(--panel-ink);color:var(--panel)}
+.note{font-size:13px;opacity:.7}
+.read{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-height:1em}
+#num{font-family:Archivo,sans-serif;font-weight:800;font-stretch:105%;font-size:clamp(56px,6vw,84px);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+#unit{font-family:Archivo,sans-serif;font-weight:700;font-size:26px}
+#status{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:16px;color:var(--panel-ink)}
+#status::before{content:"";width:12px;height:12px;border-radius:50%;background:currentColor;opacity:.35}
+#meter[data-state="pass"] #status{color:var(--pass)}
+#meter[data-state="pass"] #status::before{opacity:1}
+#meter[data-state="fail"] #status{color:var(--fail)}
+#meter[data-state="fail"] #status::before{opacity:1}
+.gauge{position:relative;height:78px;margin:4px 8px 0}
+.gauge .bar{position:absolute;left:0;right:0;top:27px;height:14px;border-radius:7px;background:color-mix(in srgb,var(--panel-ink) 16%,transparent)}
+#zone{position:absolute;top:23px;height:22px;border-radius:5px;background:var(--pass)}
+#marker{position:absolute;top:7px;width:4px;height:54px;margin-left:-2px;border-radius:2px;background:var(--panel-ink);opacity:0}
+#marker::before{content:"";position:absolute;top:-5px;left:50%;width:12px;height:12px;background:inherit;transform:translateX(-50%) rotate(45deg)}
+#meter[data-state="fail"] #marker{background:var(--fail)}
+.tick{position:absolute;top:54px;transform:translateX(-50%);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+#rule{font-size:14px;opacity:.8}
+.slide{display:flex;flex-direction:column;gap:4px;font-size:13px;opacity:.9}
+.slide input{width:100%;accent-color:var(--panel-ink)}
+.slide input:disabled{opacity:.35}
+
+/* paperwork flow */
+#verdict{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;align-content:center;visibility:hidden;opacity:0}
+.vh{font-family:Archivo,sans-serif;font-weight:800;font-size:clamp(16px,1.8vw,22px);padding:0 4px}
+.vc{border-radius:16px;padding:14px 18px;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(16px,1.7vw,24px);line-height:1.2;color:#fff}
+.vc.pass{background:#0B8F4D}
+.vc.fail{background:#C81E24}
+.vc.merge{grid-column:1 / -1;background:transparent;color:inherit;border:3px solid currentColor}
+.conn{width:4px;height:20px;background:currentColor;margin:0 auto;transform-origin:top center}
+
+footer{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 28px}
+#cap{margin:0;flex:1 1 320px;max-width:62ch;min-height:3.6em;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(20px,2.2vw,30px);line-height:1.18}
+.w{display:inline-block;white-space:pre}
+#ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:2px solid currentColor;background:transparent;border-radius:999px;padding:9px 18px;min-height:44px;font-weight:700;font-size:16px}
+.btn:disabled{opacity:.35;cursor:default}
+.btn.go{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn[aria-pressed="true"]{box-shadow:inset 0 0 0 3px currentColor}
+#num.word{font-size:clamp(34px,3.8vw,50px)}
+#pick{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;font-weight:700}
+#pick button{border:2px solid var(--panel-ink);background:transparent;color:var(--panel-ink);border-radius:999px;padding:4px 12px;min-height:32px}
+#pick button[aria-pressed="true"]{background:var(--panel-ink);color:var(--panel)}
+#outcome{font-size:15px;font-weight:700;min-height:2.6em}
+
+#checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700}
+#checks li{display:flex;gap:10px;align-items:flex-start;opacity:.55}
+#checks .bx{flex:none;width:18px;height:18px;border:2px solid var(--panel-ink);border-radius:5px;margin-top:1px;position:relative}
+#checks li[data-s="now"]{opacity:1}
+#checks li[data-s="ok"]{opacity:1}
+#checks li[data-s="ok"] .bx{background:var(--pass);border-color:var(--pass)}
+#checks li[data-s="ok"] .bx::after{content:"";position:absolute;left:4px;top:0;width:5px;height:10px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+#checks li[data-s="bad"]{opacity:1;color:var(--fail)}
+#checks li[data-s="bad"] .bx{background:var(--fail);border-color:var(--fail)}
+#checks li[data-s="bad"] .bx::after{content:"\00D7";position:absolute;inset:-4px 0 0 0;text-align:center;color:#fff;font-size:17px;line-height:20px}
+#num,#unit,#status,.gauge,#rule,.slide,.read{display:none}</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Ubiquiti WiFi bridge</h1>
+    <div id="models" role="group" aria-label="Radio end"></div>
+  </header>
+  <nav id="rail" aria-label="Steps"><ol></ol></nav>
+  <main id="stage">
+    <div id="plateWrap">
+      <svg viewBox="0 0 800 340" role="img" aria-label="Ubiquiti NanoStation radio, POE injector and network switch, and the building to sign link">
+        <defs><linearGradient id="radioG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E9ECF0"/><stop offset=".5" stop-color="#FAFBFC"/><stop offset="1" stop-color="#D5D9DF"/></linearGradient>
+<linearGradient id="blkG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1b1d22"/><stop offset=".5" stop-color="#2a2d33"/><stop offset="1" stop-color="#15171b"/></linearGradient>
+<filter id="glow" x="-500%" y="-100%" width="1100%" height="300%"><feGaussianBlur stdDeviation="4"/></filter>
+<pattern id="dots" width="9" height="9" patternUnits="userSpaceOnUse"><circle cx="2.5" cy="2.5" r="1.5" fill="#E02B2B"/><circle cx="7" cy="4.5" r="1.5" fill="#3DDC84"/><circle cx="4.5" cy="7.5" r="1.5" fill="#4a7bff"/></pattern>
+          <linearGradient id="fadeG" gradientUnits="userSpaceOnUse" x1="0" y1="330" x2="0" y2="340"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
+          <mask id="fadeM" maskUnits="userSpaceOnUse" x="-200" y="-200" width="1400" height="1000"><rect x="-200" y="-200" width="1400" height="1000" fill="url(#fadeG)"/></mask>
+          <filter id="blur" x="-10%" y="-200%" width="120%" height="500%"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+        
+<g id="link" opacity="0">
+  <g id="lkB"><rect x="30" y="66" width="190" height="234" rx="4" fill="#5b6270" stroke="#2c313b" stroke-width="3"/>
+    <g fill="#AAB4C8"><rect x="50" y="90" width="34" height="30"/><rect x="108" y="90" width="34" height="30"/><rect x="166" y="90" width="34" height="30"/>
+    <rect x="50" y="150" width="34" height="30"/><rect x="108" y="150" width="34" height="30"/><rect x="166" y="150" width="34" height="30"/>
+    <rect x="50" y="210" width="34" height="30"/><rect x="166" y="210" width="34" height="30"/></g>
+    <rect x="108" y="236" width="34" height="64" fill="#2c313b"/>
+    <text class="ar" x="125" y="50" font-size="17" font-weight="800" fill="currentColor" text-anchor="middle">Building end</text></g>
+  <g id="lkS"><rect x="560" y="76" width="210" height="224" rx="4" fill="#0d0e10" stroke="#C9CDD4" stroke-width="3"/>
+    <rect x="566" y="82" width="198" height="212" fill="url(#dots)" opacity=".75"/>
+    <text class="ar" x="665" y="56" font-size="17" font-weight="800" fill="currentColor" text-anchor="middle">Sign end</text></g>
+  <path id="beam" class="fl" d="M254 155 H528" fill="none" stroke="#14161C" stroke-width="9" stroke-linecap="round" opacity="0"/>
+  <path id="beam2" class="fl" d="M254 155 H528" fill="none" stroke="#7FD6FF" stroke-width="5" stroke-linecap="round" stroke-dasharray="2 14" opacity="0"/>
+  <g id="lkRB"><rect x="222" y="118" width="30" height="76" rx="9" fill="url(#radioG)" stroke="#9aa0a8" stroke-width="2"/>
+    <path d="M233 142 v10 a4 4 0 0 0 8 0 v-10" fill="none" stroke="#7b818a" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M237 194 V212 q0 8 -8 8" fill="none" stroke="#FF7A1A" stroke-width="4" stroke-linecap="round"/></g>
+  <g id="lkRS"><rect x="530" y="118" width="30" height="76" rx="9" fill="url(#radioG)" stroke="#9aa0a8" stroke-width="2"/>
+    <path d="M541 142 v10 a4 4 0 0 0 8 0 v-10" fill="none" stroke="#7b818a" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M545 194 V212 q0 8 -8 8" fill="none" stroke="#FF7A1A" stroke-width="4" stroke-linecap="round"/></g>
+  <g id="tree" opacity="0"><rect x="376" y="190" width="16" height="66" fill="#6b4a2b" stroke="#3d2a16" stroke-width="2"/>
+    <circle cx="384" cy="150" r="36" fill="#1FA34A" stroke="#0e6a2e" stroke-width="3"/><circle cx="356" cy="178" r="26" fill="#1FA34A" stroke="#0e6a2e" stroke-width="3"/><circle cx="412" cy="178" r="26" fill="#1FA34A" stroke="#0e6a2e" stroke-width="3"/>
+    <text class="ar" x="384" y="278" font-size="14" font-weight="800" fill="currentColor" text-anchor="middle">In the way</text></g>
+  <g id="cdown" opacity="0"><path d="M584 214 H600" stroke="#fff" stroke-width="0"/>
+    <path d="M598 204 L564 204" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity="0"/>
+    <text class="ar" x="574" y="236" font-size="14" font-weight="800" fill="#fff">Cable points down</text>
+    <path d="M545 224 V248 M537 240 L545 250 L553 240" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,0)"/></g>
+  <g id="nodrill" opacity="0"><circle cx="672" cy="146" r="40" fill="#0d0e10" opacity=".7"/>
+    <g fill="#111" stroke="#C9CDD4" stroke-width="2"><circle cx="656" cy="140" r="6"/><circle cx="684" cy="130" r="6"/><circle cx="676" cy="162" r="6"/></g>
+    <circle cx="672" cy="146" r="40" fill="none" stroke="#fff" stroke-width="11"/><circle cx="672" cy="146" r="40" fill="none" stroke="#E02B2B" stroke-width="7"/>
+    <path d="M644 118 L700 174" stroke="#fff" stroke-width="11" stroke-linecap="round"/><path d="M644 118 L700 174" stroke="#E02B2B" stroke-width="7" stroke-linecap="round"/></g>
+</g>
+
+<g id="chain" opacity="0">
+  <g id="strip"><rect x="250" y="16" width="320" height="38" rx="6" fill="#16181c" stroke="#7a7f88" stroke-width="2"/>
+    <g fill="#E9E4D4" stroke="#8a867a"><rect x="276" y="26" width="28" height="18" rx="3"/><rect x="321" y="26" width="28" height="18" rx="3"/><rect x="366" y="26" width="28" height="18" rx="3"/><rect x="411" y="26" width="28" height="18" rx="3"/><rect x="456" y="26" width="28" height="18" rx="3"/><rect x="501" y="26" width="28" height="18" rx="3"/></g>
+    <rect x="540" y="24" width="14" height="22" rx="2" fill="#C81E24" stroke="#600"/>
+    <text class="ar" x="256" y="12" font-size="12" font-weight="800" fill="currentColor">Power strip</text></g>
+  <g id="cord"><path d="M380 44 V96" stroke="#7a7f88" stroke-width="11" stroke-linecap="round"/><path d="M380 44 V96" stroke="#15161a" stroke-width="7" stroke-linecap="round"/>
+    <rect x="368" y="34" width="24" height="22" rx="4" fill="#15161a" stroke="#C9CDD4" stroke-width="2"/><rect x="367" y="84" width="26" height="22" rx="4" fill="#15161a" stroke="#C9CDD4" stroke-width="2"/></g>
+  <g id="inj"><ellipse cx="380" cy="244" rx="76" ry="10" fill="#000" opacity=".25" filter="url(#blur)"/>
+    <rect x="320" y="100" width="120" height="116" rx="8" fill="url(#blkG)" stroke="#000" stroke-width="2.5"/>
+    <path d="M356 146 v18 a9 9 0 0 0 18 0 v-18" fill="none" stroke="#6c7078" stroke-width="3.5" stroke-linecap="round"/>
+    <rect id="inGlow" x="397" y="146" width="4" height="22" rx="2" fill="#fff" filter="url(#glow)" opacity="0"/>
+    <rect id="inLed" x="397" y="148" width="4" height="18" rx="2" fill="#3a3d42"/>
+    <rect x="320" y="214" width="120" height="38" rx="6" fill="#0c0d0f" stroke="#000" stroke-width="2"/>
+    <text class="ar" x="350" y="224" font-size="9.5" font-weight="800" fill="#E9ECF3" text-anchor="middle">POE</text>
+    <text class="ar" x="410" y="224" font-size="9.5" font-weight="800" fill="#E9ECF3" text-anchor="middle">LAN</text>
+    <rect x="328" y="228" width="44" height="22" rx="2" fill="#1b1d22" stroke="#9aa0a6" stroke-width="1.5"/><rect x="388" y="228" width="44" height="22" rx="2" fill="#1b1d22" stroke="#9aa0a6" stroke-width="1.5"/></g>
+  <g id="radio"><ellipse cx="115" cy="283" rx="80" ry="8" fill="#000" opacity=".25" filter="url(#blur)"/>
+    <rect x="40" y="30" width="150" height="246" rx="30" fill="url(#radioG)" stroke="#9aa0a8" stroke-width="2.5"/>
+    <rect x="54" y="42" width="122" height="58" rx="3" fill="#F6F7F9" stroke="#cfd2d7"/>
+    <path d="M100 56 L168 56 L168 47 Z" fill="#555"/>
+    <rect id="led0" x="62" y="62" width="13" height="13" rx="1.5" fill="#6e737a" stroke="#4a4e55"/>
+    <rect id="led1" x="80.6" y="62" width="13" height="13" rx="1.5" fill="#6e737a" stroke="#4a4e55"/>
+    <rect id="led2" x="99.2" y="62" width="13" height="13" rx="1.5" fill="#6e737a" stroke="#4a4e55"/>
+    <rect id="led3" x="117.8" y="62" width="13" height="13" rx="1.5" fill="#6e737a" stroke="#4a4e55"/>
+    <rect id="led4" x="136.4" y="62" width="13" height="13" rx="1.5" fill="#6e737a" stroke="#4a4e55"/>
+    <rect id="led5" x="155" y="62" width="13" height="13" rx="1.5" fill="#6e737a" stroke="#4a4e55"/>
+    <circle cx="68.5" cy="87" r="3.4" fill="none" stroke="#555" stroke-width="1.3"/><path d="M68.5 83 v4" stroke="#555" stroke-width="1.3"/>
+    <text x="87" y="90" font-size="8" font-weight="700" fill="#444" text-anchor="middle">LAN1</text>
+    <rect x="76" y="116" width="78" height="92" rx="6" fill="#E1E4E9" stroke="#c3c7cd" stroke-width="1.5"/>
+    <g stroke="#B9BDC4" stroke-width="3"><path d="M92 120V204M102 120V204M128 120V204M138 120V204"/></g>
+    <rect x="70" y="218" width="90" height="34" rx="2" fill="#fff" stroke="#d0d3d8"/>
+    <text class="ar" x="115" y="231" font-size="9" font-weight="800" fill="#333" text-anchor="middle">NanoStation loco M2</text>
+    <text x="115" y="243" font-size="7.5" fill="#555" text-anchor="middle">24 V 0.5 A PoE</text>
+    <g id="cover"><rect x="64" y="256" width="102" height="20" rx="8" fill="#F0F2F5" stroke="#9aa0a8" stroke-width="2"/></g>
+    <text id="radioLbl" class="ar" x="115" y="22" font-size="15" font-weight="800" fill="currentColor" text-anchor="middle">Building end</text></g>
+  <g id="inset"><rect x="204" y="108" width="104" height="100" rx="8" fill="#F4F5F8" stroke="#14161C" stroke-width="2.5"/>
+    <text class="ar" x="256" y="124" font-size="12" font-weight="800" fill="#14161C" text-anchor="middle">Underside</text>
+    <text class="ar" x="230" y="142" font-size="10" font-weight="800" fill="#14161C" text-anchor="middle">LAN</text>
+    <rect x="212" y="146" width="36" height="32" rx="2" fill="#14161a" stroke="#6e747d" stroke-width="1.5"/>
+    <g fill="#C9A227"><rect x="217" y="152" width="2.2" height="8"/><rect x="221.5" y="152" width="2.2" height="8"/><rect x="226" y="152" width="2.2" height="8"/><rect x="230.5" y="152" width="2.2" height="8"/><rect x="235" y="152" width="2.2" height="8"/><rect x="239.5" y="152" width="2.2" height="8"/></g>
+    <rect id="inPlug" x="217" y="160" width="26" height="22" rx="3" fill="#FF7A1A" stroke="#a24400" stroke-width="1.5"/>
+    <circle cx="286" cy="162" r="3.5" fill="#14161a"/><text class="ar" x="286" y="146" font-size="10" font-weight="800" fill="#14161C" text-anchor="middle">Reset</text>
+    <text x="256" y="198" font-size="10" fill="#14161C" text-anchor="middle">cover removed</text></g>
+  <g id="cabO" opacity="0"><path class="cp" d="M115 278 V314 H350 V250" fill="none" stroke="#6b7078" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <path class="cp" d="M115 278 V314 H350 V250" fill="none" stroke="#FF7A1A" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect class="pl" x="340" y="236" width="20" height="18" rx="3" fill="#FF7A1A" stroke="#a24400" stroke-width="1.5"/></g>
+  <g id="cabY" opacity="0"><path class="cp" d="M410 250 V300 H612 V222" fill="none" stroke="#6b7078" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <path class="cp" d="M410 250 V300 H612 V222" fill="none" stroke="#F5B800" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect class="pl" x="400" y="236" width="20" height="18" rx="3" fill="#F5B800" stroke="#8a6600" stroke-width="1.5"/>
+    <rect class="pl" x="602" y="208" width="20" height="18" rx="3" fill="#F5B800" stroke="#8a6600" stroke-width="1.5"/></g>
+  <g id="sw"><rect x="540" y="176" width="220" height="62" rx="6" fill="#23262d" stroke="#000" stroke-width="2.5"/>
+    <g fill="#0b0c0e" stroke="#6e747d"><rect x="556" y="196" width="32" height="26" rx="2"/><rect x="596" y="196" width="32" height="26" rx="2"/><rect x="636" y="196" width="32" height="26" rx="2"/><rect x="676" y="196" width="32" height="26" rx="2"/><rect x="716" y="196" width="32" height="26" rx="2"/></g>
+    <circle id="swLed" cx="604" cy="190" r="3.5" fill="#3a3d42"/>
+    <text id="devLbl" class="ar" x="650" y="166" font-size="15" font-weight="800" fill="currentColor" text-anchor="middle">Switch or router</text></g>
+</g>
+
+<g id="scan" opacity="0">
+  <rect x="120" y="34" width="560" height="270" rx="10" fill="#F4F5F8" stroke="#14161C" stroke-width="3"/>
+  <rect x="120" y="34" width="560" height="34" rx="10" fill="#14161C"/><rect x="120" y="54" width="560" height="14" fill="#14161C"/>
+  <text class="ar" x="140" y="57" font-size="15" font-weight="800" fill="#F4F5F8">Advanced IP Scanner</text>
+  <text class="ar" x="140" y="96" font-size="13" font-weight="700" fill="#14161C">Search</text>
+  <rect x="200" y="78" width="160" height="26" rx="4" fill="#fff" stroke="#14161C" stroke-width="2"/>
+  <text id="scanQ" class="ar" x="210" y="97" font-size="16" font-weight="700" fill="#14161C"></text>
+  <rect x="140" y="122" width="520" height="26" fill="#DDE0E7"/>
+  <text class="ar" x="176" y="140" font-size="13" font-weight="800" fill="#14161C">Status</text><text class="ar" x="260" y="140" font-size="13" font-weight="800" fill="#14161C">Name</text><text class="ar" x="500" y="140" font-size="13" font-weight="800" fill="#14161C">IP (example)</text>
+  <g id="rowA"><circle cx="190" cy="173" r="8" fill="#0B8F4D"/><text class="ar" x="260" y="179" font-size="17" font-weight="800" fill="#14161C">Impact-BuildingEnd</text><text x="500" y="179" font-size="16" fill="#14161C">192.0.2.218</text></g>
+  <g id="rowB"><circle cx="190" cy="217" r="8" fill="#0B8F4D"/><text class="ar" x="260" y="223" font-size="17" font-weight="800" fill="#14161C">Impact-SignEnd</text><text x="500" y="223" font-size="16" fill="#14161C">192.0.2.219</text></g>
+  <text id="scanNone" class="ar" x="400" y="200" font-size="18" font-weight="800" fill="#C81E24" text-anchor="middle" opacity="0">No devices found</text>
+  <text x="140" y="290" font-size="12" fill="#14161C" opacity=".7">Placeholder addresses for training only.</text>
+</g>
+<g id="rings" opacity="0"><rect id="ringO" x="0" y="0" width="10" height="10" rx="8" fill="none" stroke="#fff" stroke-width="8"/><rect id="ringI" x="0" y="0" width="10" height="10" rx="8" fill="none" stroke="#14161C" stroke-width="3.5"/></g>
+
+        <g mask="url(#fadeM)">
+        <g id="probeB" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#15161a" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#15161a" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        <g id="probeR" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#E02B2B" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#E02B2B" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        </g>
+        <text id="tag" class="ar" x="780" y="322" font-size="20" font-weight="800" fill="currentColor" text-anchor="end" opacity="0"></text>
+        <g id="live" opacity="0">
+          <rect x="18" y="14" width="190" height="36" rx="18" fill="#14130C"/>
+          <circle id="liveDot" cx="40" cy="32" r="7" fill="#FFC800"/>
+          <text id="liveTxt" x="56" y="38" fill="#FFC800" font-size="17" font-weight="700">Mains power</text>
+        </g>
+      </svg>
+    </div>
+    <aside id="meter" data-state="idle" aria-label="Bench readout">
+      <div class="mode"><span class="pill" id="pill">Radio lights</span><span class="note">Example results</span></div>
+      <div class="read"><span id="num">---</span><span id="unit"></span></div>
+      <div id="status" aria-live="polite">Not measuring</div>
+      <div class="gauge" id="gauge" aria-hidden="true">
+        <div class="bar"></div><div id="zone"></div><div id="marker"></div>
+        <span class="tick" id="tickLo"></span><span class="tick" id="tickHi"></span>
+      </div>
+      <div id="rule"></div>
+      <label class="slide">Drag to try other readings
+        <input id="slider" type="range" min="0" max="1" step="0.01" value="0" disabled>
+      </label>
+      <ul id="checks" style="opacity:0;visibility:hidden"></ul>
+      <div id="pick" style="opacity:0;visibility:hidden"></div>
+      <div id="outcome" aria-live="polite"></div>
+    </aside>
+    <div id="verdict">
+      <div class="vh" data-row="0">Yes: power, LAN and a signal light</div>
+      <div class="vh" data-row="0">No: a light is missing</div>
+      <div class="conn" data-row="c0"></div><div class="conn" data-row="c0"></div>
+      <div class="vc pass" data-row="1">Leave both radios powered and mounted: .218 on the building, .219 on the sign.</div>
+      <div class="vc fail" data-row="1">Power cycle both radios, then work the checks for the missing light.</div>
+      <div class="conn" data-row="c1"></div><div class="conn" data-row="c1"></div>
+      <div class="vc merge" data-row="2">Write down what you found and what you changed.</div>
+      <div class="conn" data-row="c2"></div><div class="conn" data-row="c2"></div>
+      <div class="vc pass" data-row="3">Bridge is up. Close it out.</div>
+      <div class="vc fail" data-row="3">Still down after the checks? Replace the part they point to: injector, cable or radio.</div>
+</div>
+  </main>
+  <footer>
+    <p id="cap" aria-live="polite"></p>
+    <div id="ctl">
+      <button class="btn" id="bBack">Back</button>
+      <button class="btn" id="bReplay">Replay step</button>
+      <button class="btn" id="bAuto" aria-pressed="false">Auto-play</button>
+      <button class="btn go" id="bNext">Next</button>
+    </div>
+  </footer>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+const NS='http://www.w3.org/2000/svg';
+const mk=(tag,attrs,parent)=>{const e=document.createElementNS(NS,tag);Object.keys(attrs||{}).forEach(k=>e.setAttribute(k,attrs[k]));if(parent)parent.appendChild(e);return e;};
+const root=document.documentElement;
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const THEMES={blue:{bg:'#2336D8',fg:'#F4F6FF'},yellow:{bg:'#FFC800',fg:'#14130C'},paper:{bg:'#E9ECF3',fg:'#14161C'}};
+let theme={...THEMES.blue};
+const hex=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+const toHex=s=>s.startsWith('#')?s:'#'+s.match(/\d+/g).map(v=>(+v).toString(16).padStart(2,'0')).join('');
+const mix=(a,b,t)=>{const x=hex(toHex(a)),y=hex(toHex(b));return 'rgb('+x.map((v,i)=>Math.round(v+(y[i]-v)*t)).join(',')+')';};
+function applyTheme(){root.style.setProperty('--bg',theme.bg);root.style.setProperty('--fg',theme.fg);}
+function themeTween(t,key,pos){
+  const from={...theme}, to=THEMES[key], p={t:0};
+  t.to(p,{t:1,duration:reduce?0.01:0.7,ease:'power2.inOut',onUpdate(){
+    theme={bg:mix(from.bg,to.bg,p.t),fg:mix(from.fg,to.fg,p.t)}; applyTheme();
+  },onComplete(){theme={...to};applyTheme();}},pos);
+}
+applyTheme();
+
+/* ---------- meter / gauge ---------- */
+const meter=$('#meter'),num=$('#num'),unitEl=$('#unit'),statusEl=$('#status'),zone=$('#zone'),marker=$('#marker'),
+      tickLo=$('#tickLo'),tickHi=$('#tickHi'),rule=$('#rule'),slider=$('#slider');
+const G={lo:0,hi:1,min:0,max:1,dec:1,unit:'V DC'}; const R={v:null}; const P={val:0};
+const pct=v=>Math.max(0,Math.min(100,(v-G.min)/(G.max-G.min)*100));
+const fmt=(v,d)=>v.toFixed(d);
+function configureGauge(lo,hi,dec,tdec,unit){
+  const span=hi-lo;
+  Object.assign(G,{lo,hi,min:lo-span*0.9,max:hi+span*0.9,dec,unit});
+  zone.style.left=pct(lo)+'%'; zone.style.width=(pct(hi)-pct(lo))+'%';
+  tickLo.style.left=pct(lo)+'%'; tickHi.style.left=pct(hi)+'%';
+  tickLo.textContent=fmt(lo,tdec); tickHi.textContent=fmt(hi,tdec);
+  rule.textContent='Pass: '+fmt(lo,tdec)+' to '+fmt(hi,tdec)+' '+unit;
+  slider.min=G.min; slider.max=G.max; slider.step=(G.max-G.min)/300;
+}
+function render(v){
+  R.v=v;
+  if(v==null){num.textContent='---';unitEl.textContent='';meter.dataset.state='idle';statusEl.textContent='Not measuring';marker.style.opacity=0;return;}
+  marker.style.opacity=1; marker.style.left=pct(v)+'%';
+  num.textContent=fmt(v,G.dec); unitEl.textContent=G.unit;
+  const ok=v>=G.lo-1e-9&&v<=G.hi+1e-9;
+  meter.dataset.state=ok?'pass':'fail';
+  statusEl.textContent=ok?'In range':(v<G.lo?'Too low':'Too high');
+  slider.value=v;
+}
+slider.addEventListener('input',()=>{gsap.killTweensOf(P); render(+slider.value); if(typeof MOD!=='undefined'&&MOD.onSlide)MOD.onSlide(+slider.value);});
+
+/* ---------- shared helpers ---------- */
+const setTag=text=>{const e=$('#tag');if(!e)return;e.textContent=text;gsap.fromTo(e,{autoAlpha:0,y:8},{autoAlpha:1,y:0,duration:.35});};
+const drawIn=(t,sel,at,d)=>t.to(sel,{strokeDashoffset:0,duration:d||.6,ease:'power3.out'},at);
+function prepDash(sel,drawn){ $$(sel).forEach(p=>{const L=Math.ceil(p.getTotalLength())+2;p.dataset.len=L;p.style.strokeDasharray=L;p.style.strokeDashoffset=drawn?0:L;}); }
+/* checklist in the panel */
+function setChecks(items){
+  const ul=$('#checks'); ul.innerHTML='';
+  (items||[]).forEach((txt,i)=>{const li=document.createElement('li');li.dataset.s='off';li.innerHTML='<span class="bx"></span><span>'+txt+'</span>';ul.appendChild(li);});
+  gsap.set('#checks',{autoAlpha:(items&&items.length)?1:0});
+}
+function check(i,state){ const li=$$('#checks li')[i]; if(li)li.dataset.s=state; }
+function allChecks(state){ $$('#checks li').forEach(li=>li.dataset.s=state); }
+/* option buttons in the panel */
+let pickCb=null;
+function setPick(label,opts,cur,cb){
+  const box=$('#pick'); pickCb=cb;
+  if(!opts){box.innerHTML='';gsap.set(box,{autoAlpha:0});return;}
+  box.innerHTML='<span>'+label+'</span>';
+  opts.forEach(o=>{const b=document.createElement('button');b.textContent=o[1];b.dataset.k=o[0];b.setAttribute('aria-pressed',o[0]===cur);
+    b.onclick=()=>{$$('#pick button').forEach(x=>x.setAttribute('aria-pressed',x===b));pickCb&&pickCb(o[0]);};box.appendChild(b);});
+}
+/* probes: two leads, black and red, tip at local 0,0 */
+const probeB=$('#probeB'),probeR=$('#probeR');
+if(probeB){gsap.set([probeB,probeR],{transformOrigin:'0px 0px'});}
+const PD=150;
+const axisV=th=>[-Math.sin(th*Math.PI/180),Math.cos(th*Math.PI/180)];
+function probeAt(el,p){gsap.set(el,{x:p[0],y:p[1],rotation:p[2],autoAlpha:1});}
+function probePark(el,p){const a=axisV(p[2]);gsap.set(el,{x:p[0]+a[0]*PD,y:p[1]+a[1]*PD,rotation:p[2],autoAlpha:0});}
+function probeIn(t,el,p,at,d){t.to(el,{x:p[0],y:p[1],rotation:p[2],autoAlpha:1,duration:d||1.1,ease:'power3.out'},at);}
+function probeOut(t,el,p,at){const a=axisV(p[2]);t.to(el,{x:p[0]+a[0]*PD,y:p[1]+a[1]*PD,autoAlpha:0,duration:.6,ease:'power2.in'},at);}
+const pulse=(sels,atTime,t)=>t.fromTo(sels,{scale:1},{scale:1.45,yoyo:true,repeat:1,duration:.17,transformOrigin:'50% 50%',ease:'power2.out'},atTime);
+
+const paperScene=t=>{
+  t.to(['#plateWrap','#meter'],{autoAlpha:0,y:-24,duration:.5,ease:'power2.in'},0);
+  t.set('#verdict',{autoAlpha:1},.5);
+  [0,1,2,3].forEach(r=>{
+    t.fromTo('#verdict [data-row="'+r+'"]',{y:24,autoAlpha:0},{y:0,autoAlpha:1,duration:.5,stagger:.12,ease:'power3.out'},.6+r*.75);
+    if(r<3) t.fromTo('#verdict [data-row="c'+r+'"]',{scaleY:0},{scaleY:1,duration:.3,ease:'none'},.6+r*.75+.45);
+  });
+};
+
+
+const ORDER=['intro','power','radio','network','mount','lights','find','symptom','close'];
+const TITLES={intro:'The bridge',power:'Power the injector',radio:'Cable the radio',network:'Connect the LAN',mount:'Mount and aim',lights:'Read the lights',find:'Find the radios',symptom:'Troubleshoot',close:'Close out'};
+const THEME_OF={intro:'blue',power:'yellow',radio:'blue',network:'blue',mount:'blue',lights:'blue',find:'blue',symptom:'paper',close:'paper'};
+const MODELS={
+  bld:{key:'bld',name:'Building end',gen:'Label .218 · on the building',dev:'Switch or router',side:'bld'},
+  sgn:{key:'sgn',name:'Sign end',gen:'Label .219 · on the sign',dev:'Sign network',side:'sgn'}
+};
+const CAP={
+  intro:m=>'Two radios make a wireless bridge: one on the building, one on the sign. Each is powered and fed by a POE injector, and each shows its health on lights at the back.',
+  power:m=>'Plug the POE injector into an outlet. Mains power, so keep it dry. When it has power it shows a white light.',
+  radio:m=>'Remove the bottom cover of the radio and plug an Ethernet cable into its LAN jack. Put the other end in the injector’s POE jack. The power light on the radio turns green.',
+  network:m=>'Plug a second cable from the injector’s LAN jack into an active network port. Do not swap the two jacks. The LAN light on the radio now blinks green.',
+  mount:m=>'The radio labelled .218 is the building end and .219 is the sign end. Give them a clear line of sight with nothing in between. On the sign, point the cable down and never drill into the cabinet.',
+  lights:m=>'Read the six lights on the back. Once the two radios link, a red light comes on, then orange and green. More lights lit means a stronger signal.',
+  find:m=>'From a computer on the same network, open Advanced IP Scanner and search for Ubi. Both radios should be listed. If one or both are missing, check both by hand.',
+  symptom:m=>'First check the site has internet and power cycle the sign. Then pick the symptom and work down the checks for the '+m.name.toLowerCase()+'.',
+  close:m=>'Good is power, LAN and at least one signal light. Missing one? Power cycle both radios and work the symptom checks. Note what you found and changed.'
+};
+const S={bars:4,scan:'both',sym:'nopow'};
+const GOOD=['Injector powered: white light','Radio powered: green power light','LAN connected: blinking green LAN1','Linked to the other radio: red, then orange and green'];
+const goodChecks=n=>{setChecks(GOOD);for(let i=0;i<n;i++)check(i,'ok');};
+const SIGC=['#FF2D6A','#FFA21A','#4BD63A','#4BD63A'];
+const SYM=[['nopow','No power light'],['nolan','No LAN light'],['nosig','No signal lights'],['err','Red and yellow blinking']];
+const CAUSE={
+  nopow:{bld:['Radio cable is in the injector’s LAN jack, not POE','Injector has no power: check the outlet and cord'],
+         sgn:['The 120 V power strip inside the sign has likely tripped','Strip is fine but no white light: replace the POE injector']},
+  nolan:{bld:['Radio cable goes into the POE jack','Injector LAN jack goes to a live switch or router'],
+         sgn:['LAN cable is not in the POE jack','Network is travelling through the cable (controller side)','Swap the Ethernet cable: it may be bad']},
+  nosig:{bld:['Both radios are powered: one off means no signal lights','Neither radio fell back to the factory address (192.0.2.20)','Nothing blocks the line of sight: trees, walls, bushes'],
+         sgn:['Both radios are powered: one off means no signal lights','Neither radio fell back to the factory address (192.0.2.20)','Nothing blocks the line of sight: trees, walls, bushes']},
+  err:{bld:['Blinking red and yellow is an error state','Look for water damage','Swap the Ethernet cable'],
+       sgn:['Blinking red and yellow is an error state','Look for water damage','Swap the Ethernet cable']}
+};
+const OUTC={nopow:'No power light: the injector has no power, or the wrong cable is in it.',nolan:'No LAN light: almost always a physical connection.',nosig:'Power and LAN are fine but no signal lights: the radios cannot see each other.',err:'Power, but red and yellow blinking: the radio is in an error state.'};
+const BARTXT=['No signal lights: the radios cannot see each other.','1 light (red): the radios have linked, weakest signal.','2 lights (red, orange): linked, a little stronger.','3 lights: linked, good signal.','All 4 lit: linked, strongest signal.'];
+const dashFlow=reduce?null:gsap.to({o:0},{o:-32,duration:1.1,repeat:-1,ease:'none',onUpdate(){const o=this.targets()[0].o;$$('.fl').forEach(p=>p.style.strokeDashoffset=o);}});
+const PARTS=['strip','cord','inj','radio','inset','cabO','cabY','sw'];
+const PRIOR={intro:[],power:[],radio:['strip','cord','inj'],network:['strip','cord','inj','radio','cabO','sw'],mount:[],lights:['strip','cord','inj','radio','cabO','cabY','sw'],find:[],symptom:['strip','cord','inj','radio','cabO','cabY','sw'],close:[]};
+const SHOWN_AFTER={network:[]};
+function applyLeds(o){
+  gsap.killTweensOf(['#led0','#led1','#led2','#led3','#led4','#led5','#inLed','#inGlow']);
+  const off='#6e737a',G='#35E27A';
+  gsap.set('#led0',{fill:o.pow?G:off,opacity:1});
+  gsap.set('#led1',{fill:o.lan?G:off,opacity:1});
+  for(let i=0;i<4;i++) gsap.set('#led'+(i+2),{fill:(o.sig>i)?SIGC[i]:off,opacity:1});
+  if(o.lan==='b'&&!reduce) gsap.to('#led1',{opacity:.2,duration:.4,yoyo:true,repeat:-1,ease:'none'});
+  if(o.err){ gsap.set('#led2',{fill:SIGC[0]}); gsap.set('#led3',{fill:SIGC[1]});
+    if(!reduce){ gsap.fromTo('#led2',{opacity:1},{opacity:.15,duration:.35,yoyo:true,repeat:-1,ease:'none'}); gsap.fromTo('#led3',{opacity:.15},{opacity:1,duration:.35,yoyo:true,repeat:-1,ease:'none'}); } }
+  gsap.set('#inLed',{fill:o.inj?'#fff':'#3a3d42'}); gsap.set('#inGlow',{opacity:o.inj?.9:0});
+  gsap.set('#swLed',{fill:o.swl?G:'#3a3d42'});
+}
+function ring(t,x,y,w,h,at){
+  const o=(x+w/2)+' '+(y+h/2);
+  t.call(()=>{['#ringO','#ringI'].forEach(s=>{const e=$(s);e.setAttribute('x',x);e.setAttribute('y',y);e.setAttribute('width',w);e.setAttribute('height',h);});},null,at);
+  t.fromTo('#rings',{autoAlpha:0,scale:1,svgOrigin:o},{autoAlpha:1,scale:1,svgOrigin:o,duration:.35,ease:'back.out(2)'},at+.02);
+  if(!reduce) t.fromTo('#rings',{scale:1,svgOrigin:o},{scale:1.1,svgOrigin:o,duration:.22,yoyo:true,repeat:5,ease:'sine.inOut'},at+.45);
+}
+function scanRows(){
+  const m=S.scan;
+  gsap.set('#rowA',{autoAlpha:m==='none'?0:1}); gsap.set('#rowB',{autoAlpha:m==='both'?1:0}); gsap.set('#scanNone',{opacity:0});
+}
+const SCANOUT={both:'Both listed: both radios have power and a connection.',one:'Only one listed: check the connection on both radios by hand (sign and building).',none:'Neither listed: check the connection on both radios by hand.'};
+const MOD={ORDER,TITLES,THEME_OF,CAP,MODELS,model:MODELS.bld,SLIDER:[],
+  init(){},
+  kill(){gsap.killTweensOf(['#rings','#scan','#link','#chain','#tree','#nodrill','#cdown','#beam','#beam2']);},
+  prep(id){
+    const m=MOD.model, pos=ORDER.indexOf(id);
+    $('#radioLbl').textContent=m.name; $('#devLbl').textContent=m.dev;
+    $('#outcome').textContent='';
+    gsap.set('#rings',{autoAlpha:0});
+    gsap.set('#scan',{autoAlpha:0,y:0});
+    const nosig=id==='symptom'&&S.sym==='nosig';
+    const linkOn=id==='intro'||id==='mount'||nosig;
+    const chainOn=['power','radio','network','lights'].includes(id)||(id==='symptom'&&!nosig);
+    gsap.set('#link',{autoAlpha:linkOn?1:0,y:0}); gsap.set('#chain',{autoAlpha:chainOn?1:0,y:0});
+    gsap.set(['#lkB','#lkS','#lkRB','#lkRS'],{autoAlpha:1,y:0});
+    gsap.set('#beam',{opacity:linkOn?(nosig?.25:1):0}); gsap.set('#beam2',{opacity:linkOn?(nosig?.25:1):0});
+    gsap.set('#tree',{autoAlpha:nosig?1:0}); gsap.set('#nodrill',{autoAlpha:0}); gsap.set('#cdown',{autoAlpha:0});
+    const pr=PRIOR[id]||[];
+    PARTS.forEach(p=>gsap.set('#'+p,{autoAlpha:pr.includes(p)?1:0,y:0}));
+    gsap.set('#cover',{y:0,autoAlpha:pos>=2?0:1});
+    if(id==='radio') gsap.set('#cover',{y:0,autoAlpha:1});
+    prepDash('#cabO .cp',pos>=3||id==='symptom'); prepDash('#cabY .cp',pos>=4&&id!=='network'||id==='symptom');
+    gsap.set('#cabO .pl,#cabY .pl',{opacity:(pos>=3||id==='symptom')?1:0});
+    gsap.set('#cabY .pl',{opacity:(id==='lights'||id==='symptom')?1:0});
+    gsap.set('#inPlug',{opacity:id==='radio'?0:1});
+    /* lights state at start of the step */
+    if(id==='intro'||id==='power') applyLeds({});
+    if(id==='radio') applyLeds({inj:1});
+    if(id==='network') applyLeds({inj:1,pow:1});
+    if(id==='lights') applyLeds({inj:1,pow:1,lan:'b',swl:1,sig:0});
+    if(id==='mount'||id==='find'||id==='close') applyLeds({inj:1,pow:1,lan:'b',swl:1,sig:S.bars});
+    if(id==='symptom'){
+      const k=S.sym;
+      applyLeds({nopow:{inj:m.side==='bld'?1:0},nolan:{inj:1,pow:1},nosig:{inj:1,pow:1,lan:'b',swl:1},err:{inj:1,pow:1,lan:1,swl:1,err:1}}[k]);
+      setChecks(CAUSE[k][m.side]);
+      setPick('Symptom',SYM,k,v=>{S.sym=v;go(cur);}); gsap.set('#pick',{autoAlpha:0});
+    }
+    if(id==='intro')goodChecks(0);
+    if(id==='power')goodChecks(0);
+    if(id==='radio')goodChecks(1);
+    if(id==='network')goodChecks(2);
+    if(id==='mount')goodChecks(3);
+    if(id==='lights'){goodChecks(3); setPick('Example signal',[[0,'None'],[1,'1 light'],[2,'2 lights'],[3,'3 lights'],[4,'All 4']],S.bars,v=>{
+      S.bars=+v; applyLeds({inj:1,pow:1,lan:'b',swl:1,sig:S.bars}); $('#outcome').textContent=BARTXT[S.bars]; setTag(S.bars?'Linked':'Not linked');
+      check(3,S.bars?'ok':'bad'); }); gsap.set('#pick',{autoAlpha:0}); }
+    if(id==='find'){
+      setChecks(['Scanner running on the same network','Search for “Ubi”','Both radios listed']);
+      setPick('Scan result',[['both','Both listed'],['one','One listed'],['none','None listed']],S.scan,v=>{S.scan=v;go(cur);}); gsap.set('#pick',{autoAlpha:0});
+      scanRows(); $('#scanQ').textContent='';
+    }
+  },
+  scenes:{
+    intro(t){
+      t.fromTo(['#lkB','#lkS'],{y:30,autoAlpha:0},{y:0,autoAlpha:1,duration:.8,ease:'power3.out',stagger:.1},.2);
+      t.fromTo(['#lkRB','#lkRS'],{scale:0,autoAlpha:0,transformOrigin:'50% 50%'},{scale:1,autoAlpha:1,duration:.5,ease:'back.out(2)',stagger:.1},.9);
+      t.fromTo(['#beam','#beam2'],{opacity:0},{opacity:1,duration:.6},1.5);
+      t.fromTo('#meter',{x:40,autoAlpha:0},{x:0,autoAlpha:1,duration:.7,ease:'power3.out'},.5);
+      t.call(()=>setTag('Needs power, LAN and a link'),null,2);
+    },
+    power(t){
+      t.fromTo('#live',{autoAlpha:0},{autoAlpha:1,duration:.3},.2);
+      t.call(()=>{$('#liveTxt').textContent='Mains power';},null,0);
+      t.fromTo(['#strip','#inj'],{y:40,autoAlpha:0},{y:0,autoAlpha:1,duration:.8,ease:'power3.out',stagger:.1},.3);
+      t.fromTo('#cord',{autoAlpha:0},{autoAlpha:1,duration:.4},1.2);
+      t.call(()=>{applyLeds({inj:1});setTag('White light: injector has power');check(0,'ok');},null,2);
+    },
+    radio(t){
+      t.fromTo('#radio',{y:40,autoAlpha:0},{y:0,autoAlpha:1,duration:.8,ease:'power3.out'},.2);
+      t.to('#cover',{y:34,autoAlpha:0,duration:.7,ease:'power2.in'},1.1);
+      t.fromTo('#inset',{autoAlpha:0,x:-20},{autoAlpha:1,x:0,duration:.5},1.5);
+      t.fromTo('#inPlug',{opacity:0,x:-14},{opacity:1,x:0,duration:.5},2.0);
+      t.fromTo('#cabO',{autoAlpha:0},{autoAlpha:1,duration:.1},2.6);
+      $$('#cabO .cp').forEach(p=>t.fromTo(p,{strokeDashoffset:+p.dataset.len},{strokeDashoffset:0,duration:1.1,ease:'power2.inOut'},2.6));
+      t.fromTo('#cabO .pl',{opacity:0},{opacity:1,duration:.3},3.6);
+      t.call(()=>{applyLeds({inj:1,pow:1});check(1,'ok');setTag('Radio power light: green');},null,4.1);
+    },
+    network(t){
+      t.fromTo('#sw',{y:30,autoAlpha:0},{y:0,autoAlpha:1,duration:.7,ease:'power3.out'},.2);
+      t.fromTo('#cabY',{autoAlpha:0},{autoAlpha:1,duration:.1},1.2);
+      $$('#cabY .cp').forEach(p=>t.fromTo(p,{strokeDashoffset:+p.dataset.len},{strokeDashoffset:0,duration:1.1,ease:'power2.inOut'},1.2));
+      t.fromTo('#cabY .pl',{opacity:0},{opacity:1,duration:.3},2.2);
+      t.call(()=>{applyLeds({inj:1,pow:1,lan:'b',swl:1});check(2,'ok');setTag('LAN1 blinking green');},null,2.7);
+    },
+    mount(t){
+      t.fromTo('#cdown',{autoAlpha:0},{autoAlpha:1,duration:.5},.5);
+      t.fromTo('#nodrill',{autoAlpha:0,scale:.6,svgOrigin:'672 146'},{autoAlpha:1,scale:1,svgOrigin:'672 146',duration:.6,ease:'back.out(2)'},1.6);
+      t.call(()=>setTag('Never drill holes in the cabinet'),null,1.8);
+    },
+    lights(t){
+      t.fromTo('#chain',{autoAlpha:1},{autoAlpha:1,duration:.1},0);
+      t.call(()=>setTag('Power and LAN first'),null,.3);
+      for(let i=0;i<4;i++) t.call(()=>{ if(S.bars>i){gsap.set('#led'+(i+2),{fill:SIGC[i]});} if(i===0)setTag(S.bars?'Red: linked':'Not linked'); if(i===1&&S.bars>1)setTag('Orange, then green: signal strength');},null,1.2+i*.8);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},1.2);
+      t.call(()=>{check(3,S.bars?'ok':'bad');$('#outcome').textContent=BARTXT[S.bars];},null,1.2+4*.8);
+    },
+    find(t){
+      t.fromTo('#scan',{autoAlpha:0,y:30},{autoAlpha:1,y:0,duration:.6,ease:'power3.out'},.2);
+      t.call(()=>check(0,'ok'),null,.9);
+      ['U','Ub','Ubi'].forEach((s,i)=>t.call(()=>{$('#scanQ').textContent=s;},null,1.1+i*.3));
+      t.call(()=>check(1,'ok'),null,2.1);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.8);
+      t.fromTo('#rowA',{x:-20,autoAlpha:0},{x:0,autoAlpha:S.scan==='none'?0:1,duration:.4},2.4);
+      t.fromTo('#rowB',{x:-20,autoAlpha:0},{x:0,autoAlpha:S.scan==='both'?1:0,duration:.4},2.8);
+      t.call(()=>{ if(S.scan==='none')gsap.set('#scanNone',{opacity:1}); check(2,S.scan==='both'?'ok':'bad'); $('#outcome').textContent=SCANOUT[S.scan]; setTag(S.scan==='both'?'Both radios found':'Radio missing'); },null,3.3);
+    },
+    symptom(t){
+      const k=S.sym, side=MOD.model.side;
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.3);
+      const nosig=k==='nosig';
+      t.fromTo(nosig?'#link':'#chain',{autoAlpha:0},{autoAlpha:1,duration:.4},.1);
+      if(nosig) t.fromTo('#tree',{autoAlpha:0,y:-30},{autoAlpha:1,y:0,duration:.6,ease:'bounce.out'},.5);
+      const R={nopow:side==='bld'?[322,222,56,34]:[244,12,330,46],nolan:[322,222,116,34],nosig:[346,106,76,156],err:[50,40,130,62]}[k];
+      ring(t,R[0],R[1],R[2],R[3],.9);
+      const n=CAUSE[k][side].length;
+      for(let i=0;i<n;i++) t.call(()=>check(i,'now'),null,1.4+i*.5);
+      t.call(()=>{$('#outcome').textContent=OUTC[k];setTag(SYM.find(s=>s[0]===k)[1]);},null,1.2);
+    },
+    close:paperScene
+  }
+};
+
+/* ---------- player ---------- */
+let steps=MOD.ORDER.slice(), cur=0, tl=null, auto=false, autoCall=null;
+function renderChips(){
+  const box=$('#models'); box.innerHTML='';
+  if(!MOD.MODELS){return;}
+  Object.values(MOD.MODELS).forEach(m=>{
+    const b=document.createElement('button'); b.className='chip'; b.setAttribute('aria-pressed',m===MOD.model);
+    b.innerHTML='<b>'+m.name+'</b><small>'+m.gen+'</small>'; b.onclick=()=>{MOD.model=m;renderChips();go(cur);}; box.appendChild(b);
+  });
+}
+function renderRail(){
+  const ol=$('#rail ol'); ol.innerHTML='';
+  steps.forEach((id,i)=>{
+    const li=document.createElement('li'); const b=document.createElement('button');
+    b.className=i===cur?'on':''; if(i===cur)b.setAttribute('aria-current','step');
+    b.innerHTML='<span class="n">'+(i+1)+'</span><span class="t">'+MOD.TITLES[id]+'</span>'; b.onclick=()=>go(i);
+    li.appendChild(b); ol.appendChild(li);
+  });
+}
+const cap=$('#cap');
+function caption(t,text){
+  cap.innerHTML='';
+  text.split(' ').forEach((w,i,a)=>{const s=document.createElement('span');s.className='w';s.textContent=w+(i<a.length-1?' ':'');cap.appendChild(s);});
+  t.fromTo(cap.children,{y:16,autoAlpha:0},{y:0,autoAlpha:1,duration:.4,stagger:.03,ease:'power2.out'},.2);
+}
+function setBtns(){ $('#bBack').disabled=cur===0; $('#bNext').textContent=cur===steps.length-1?'Restart':'Next'; }
+function done(id){
+  slider.disabled=!(MOD.SLIDER||[]).includes(id);
+  if(MOD.done)MOD.done(id);
+  if(autoCall){autoCall.kill();autoCall=null;}
+  if(auto&&cur<steps.length-1) autoCall=gsap.delayedCall(2.8,()=>go(cur+1));
+}
+function baseReset(){
+  gsap.set(['#plateWrap','#meter'],{autoAlpha:1,x:0,y:0});
+  gsap.set('#verdict',{autoAlpha:0});
+  gsap.set('#live',{autoAlpha:0,y:0});
+  gsap.set('#tag',{autoAlpha:0,y:0});
+  slider.disabled=true; gsap.killTweensOf(P);
+  if(probeB){probePark(probeB,[0,0,0]);probePark(probeR,[0,0,0]);}
+  configureGauge(...(MOD.gaugeCfg?MOD.gaugeCfg():[0,1,2,1,'V DC'])); render(null);
+  setPick('',null); setChecks([]);
+}
+function go(i){
+  i=Math.max(0,Math.min(steps.length-1,i));
+  if(tl)tl.kill(); if(autoCall){autoCall.kill();autoCall=null;}
+  gsap.killTweensOf(['#tag']);
+  if(MOD.kill)MOD.kill();
+  cur=i; const id=steps[i];
+  renderRail(); baseReset(); MOD.prep(id);
+  tl=gsap.timeline({onComplete:()=>done(id)});
+  themeTween(tl,MOD.THEME_OF[id],0);
+  caption(tl,MOD.CAP[id](MOD.model));
+  MOD.scenes[id](tl);
+  setBtns();
+  if(reduce) tl.progress(1);
+}
+$('#bNext').onclick=()=>go(cur===steps.length-1?0:cur+1);
+$('#bBack').onclick=()=>go(cur-1);
+$('#bReplay').onclick=()=>go(cur);
+$('#bAuto').onclick=function(){
+  auto=!auto; this.setAttribute('aria-pressed',auto);
+  if(auto&&tl&&!tl.isActive()&&cur<steps.length-1&&!autoCall) autoCall=gsap.delayedCall(1.2,()=>go(cur+1));
+  if(!auto&&autoCall){autoCall.kill();autoCall=null;}
+};
+document.addEventListener('keydown',e=>{
+  if(e.target&&e.target.type==='range')return;
+  if(e.key==='ArrowRight')go(cur+1); else if(e.key==='ArrowLeft')go(cur-1); else if(e.key==='r'||e.key==='R')go(cur);
+});
+if(MOD.init)MOD.init();
+renderChips(); go(0);
+
+})();
+</script>
+</body>
+</html>

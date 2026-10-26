@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Impact LED Training Modules</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --blue:#2336D8; --blue-ink:#F4F6FF; --yellow:#FFC800; --yellow-ink:#14130C; --paper:#E9ECF3; --paper-ink:#14161C;
+  --panel:#F4F5F8; --panel-ink:#14161C; --pass:#0B8F4D;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){ :root{ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; } }
+*,*::before,*::after{box-sizing:border-box}
+html{min-height:100%}
+body{margin:0;min-height:100vh;background:var(--blue);color:var(--blue-ink);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.ar,h1,h2,h3{font-family:Archivo,"Helvetica Neue",Arial,sans-serif}
+a{color:inherit}
+:focus-visible{outline:3px solid currentColor;outline-offset:3px}
+
+/* ---------- launch screen ---------- */
+#launch{position:fixed;inset:0;z-index:10;background:var(--blue);display:grid;place-items:center;overflow:hidden;cursor:pointer}
+#matrix{position:absolute;inset:0;width:100%;height:100%}
+#lcenter{position:relative;text-align:center;padding:0 20px;display:flex;flex-direction:column;align-items:center;gap:14px}
+#logo{margin:0;font-weight:900;font-stretch:125%;font-size:clamp(34px,9vw,130px);line-height:.9;letter-spacing:-.02em;display:flex;gap:.02em;text-transform:uppercase;text-shadow:0 0 40px rgba(255,255,255,.35)}
+#logo span{display:inline-block;opacity:0}
+#logo .led{color:var(--yellow);text-shadow:0 0 18px rgba(255,200,0,.9),0 0 60px rgba(255,200,0,.6)}
+#sub{font-weight:800;font-stretch:112%;font-size:clamp(14px,2.6vw,26px);letter-spacing:.42em;text-transform:uppercase;opacity:0;padding-left:.42em}
+#bar{width:min(420px,70vw);height:8px;border-radius:4px;background:rgba(244,246,255,.22);overflow:hidden;opacity:0}
+#bar i{display:block;height:100%;width:0;background:var(--yellow);box-shadow:0 0 14px var(--yellow)}
+#status{font-weight:700;font-size:14px;letter-spacing:.14em;text-transform:uppercase;opacity:0;font-variant-numeric:tabular-nums;min-height:1.2em}
+#enter{margin-top:6px;opacity:0;visibility:hidden;border:3px solid var(--yellow);background:var(--yellow);color:var(--yellow-ink);font:800 18px/1 Archivo,sans-serif;font-stretch:112%;letter-spacing:.08em;text-transform:uppercase;padding:15px 34px;border-radius:999px;min-height:48px;cursor:pointer}
+#enter:hover{background:transparent;color:var(--yellow)}
+#skip{position:absolute;right:18px;bottom:calc(16px + env(safe-area-inset-bottom,0px));background:none;border:0;color:inherit;opacity:.65;font:700 14px "Atkinson Hyperlegible",sans-serif;text-decoration:underline;cursor:pointer;min-height:44px;padding:0 8px}
+#scan{position:absolute;left:0;right:0;height:90px;top:-90px;background:linear-gradient(to bottom,transparent,rgba(255,255,255,.16),transparent);pointer-events:none}
+#flash{position:fixed;inset:0;z-index:20;background:var(--yellow);transform:translateY(100%);pointer-events:none}
+
+/* ---------- module menu ---------- */
+#home{max-width:1180px;margin:0 auto;padding:clamp(24px,5vw,56px) clamp(16px,3vw,36px) 48px}
+.hd{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:8px}
+.hd h1{margin:0;font-weight:900;font-stretch:118%;font-size:clamp(30px,5.4vw,60px);line-height:1;letter-spacing:-.02em;text-transform:uppercase}
+.hd h1 em{font-style:normal;color:var(--yellow)}
+.hd p{margin:0;font-size:17px;max-width:34ch;opacity:.9}
+.key{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 6px}
+.key span{display:inline-flex;align-items:center;gap:8px;border:2px solid currentColor;border-radius:999px;padding:5px 13px;font-size:13px;font-weight:700}
+.key i{width:12px;height:12px;border-radius:50%;display:block}
+.grp{margin-top:40px;position:relative}
+.grp h2{margin:0 0 14px;font-weight:800;font-stretch:112%;font-size:15px;letter-spacing:.18em;text-transform:uppercase;display:flex;align-items:center;gap:14px}
+.grp h2::after{content:"";flex:1;height:2px;background:currentColor;opacity:.35}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.card{position:relative;display:flex;flex-direction:column;gap:6px;min-height:150px;padding:18px 18px 16px;border-radius:22px;border:3px solid var(--panel-ink);background:var(--panel);color:var(--panel-ink);text-decoration:none;overflow:hidden;transition:transform .18s ease,box-shadow .18s ease}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:12px;background:var(--c,var(--blue))}
+.card.y{--c:var(--yellow)} .card.p{--c:#9aa3b8}
+.card:hover,.card:focus-visible{transform:translateY(-5px);box-shadow:0 12px 0 -2px rgba(0,0,0,.28)}
+.card .no{font:800 13px Archivo,sans-serif;letter-spacing:.14em;opacity:.55;padding-left:10px}
+.card h3{margin:0;padding-left:10px;min-height:2.3em;font-weight:800;font-stretch:108%;font-size:21px;line-height:1.15}
+.card p{margin:0;padding-left:10px;font-size:15px;opacity:.78}
+.card .go{margin-top:auto;padding-left:10px;font:800 14px Archivo,sans-serif;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.card .go::after{content:"→";transition:transform .18s}
+.card:hover .go::after{transform:translateX(6px)}
+.card .dots{position:absolute;right:14px;top:14px;display:grid;grid-template-columns:repeat(4,6px);gap:4px}
+.card .dots b{width:6px;height:6px;border-radius:50%;background:var(--c,var(--blue));opacity:.25}
+.card:hover .dots b{animation:blink .9s infinite}
+.card:hover .dots b:nth-child(2n){animation-delay:.15s}.card:hover .dots b:nth-child(3n){animation-delay:.3s}
+@keyframes blink{0%,100%{opacity:.2}50%{opacity:1}}
+footer{margin-top:44px;font-size:14px;opacity:.7}
+.hidden{display:none}
+@media (prefers-reduced-motion:reduce){ .card,.card .go::after{transition:none} .card:hover .dots b{animation:none} }
+</style>
+</head>
+<body>
+
+<main id="home" aria-label="Impact LED Training Modules">
+  <div class="hd">
+    <h1>Impact LED<br><em>Training</em> Modules</h1>
+    <p>Click-through bench walkthroughs for new technicians. Pick a module to start.</p>
+  </div>
+  <div class="key" aria-hidden="true">
+    <span><i style="background:var(--yellow)"></i>Live hazard</span>
+    <span><i style="background:#fff"></i>Low-voltage work</span>
+    <span><i style="background:#9aa3b8"></i>Paperwork and decisions</span>
+  </div>
+
+  <section class="grp" aria-labelledby="g1"><h2 id="g1">Power</h2>
+    <div class="cards">
+      <a class="card y" href="Testing power supplies.html"><span class="no">01</span><h3>Testing power supplies</h3><p>Check output voltage against the pass band.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+      <a class="card y" href="Testing power strips.html"><span class="no">02</span><h3>Testing power strips</h3><p>Verify returned strips before they go back out.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+      <a class="card y" href="Testing fans.html"><span class="no">03</span><h3>Testing exhaust fans</h3><p>Bench-test returned cabinet fans.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+    </div>
+  </section>
+
+  <section class="grp" aria-labelledby="g2"><h2 id="g2">Sign electronics</h2>
+    <div class="cards">
+      <a class="card" href="Testing returned LED modules.html"><span class="no">04</span><h3>Testing returned LED modules</h3><p>Find dead diodes and record the result.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+      <a class="card" href="Testing controllers.html"><span class="no">05</span><h3>Testing controllers</h3><p>Power up and confirm a returned controller works.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+      <a class="card" href="Testing i5A receive card.html"><span class="no">06</span><h3>Testing the i5A receive card</h3><p>Bench-check an i5A receive card.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+      <a class="card" href="Testing 5A-75E receive card.html"><span class="no">07</span><h3>Testing the 5A-75E receive card</h3><p>Bench-check a 5A-75E receive card.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+      <a class="card" href="Testing i5a-907 receive card.html"><span class="no">08</span><h3>Testing the i5a-907 receive card</h3><p>Receive card and 4-port hub together.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+      <a class="card" href="Testing i5a hubs.html"><span class="no">09</span><h3>Testing i5a hubs</h3><p>Check every port on a returned hub.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+      <a class="card" href="Testing 12 port hub.html"><span class="no">10</span><h3>Testing the 12-port hub</h3><p>Power and port checks for the 12-port hub.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+    </div>
+  </section>
+
+  <section class="grp" aria-labelledby="g3"><h2 id="g3">Network and connectivity</h2>
+    <div class="cards">
+      <a class="card" href="Ubiquiti WiFi bridge.html"><span class="no">11</span><h3>Ubiquiti WiFi bridge</h3><p>Status lights, alignment and troubleshooting.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+      <a class="card" href="Cradlepoint modems.html"><span class="no">12</span><h3>Cradlepoint modems</h3><p>IBR200 and S400: install, lights and checks.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+      <a class="card" href="Ethernet bulkhead connector.html"><span class="no">13</span><h3>Ethernet bulkhead connector</h3><p>Build one, step by step, in T568B order.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+      <a class="card p" href="Cloud network requirements.html"><span class="no">14</span><h3>Cloud network requirements</h3><p>Ports and addresses a customer network must open.</p><span class="go">Start</span><span class="dots" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></span></a>
+    </div>
+  </section>
+
+  <footer>Impact LED Signs · Bench training</footer>
+</main>
+
+<div id="flash"></div>
+
+<div id="launch" role="dialog" aria-label="Impact LED Training Modules">
+  <canvas id="matrix"></canvas>
+  <div id="scan"></div>
+  <div id="lcenter">
+    <h1 id="logo" aria-label="Impact LED"></h1>
+    <div id="sub">Training Modules</div>
+    <div id="bar"><i></i></div>
+    <div id="status" aria-live="polite">Initializing</div>
+    <button id="enter" type="button">Enter</button>
+  </div>
+  <button id="skip" type="button">Skip intro</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function(){
+  var launch=document.getElementById('launch'), home=document.getElementById('home');
+  var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var seen=false; try{seen=sessionStorage.getItem('ilt-launched')==='1';}catch(e){}
+  var closed=false;
+
+  function done(){ if(closed)return; closed=true; try{sessionStorage.setItem('ilt-launched','1');}catch(e){} cancelAnimationFrame(raf); launch.remove(); document.getElementById('flash').remove(); }
+  var raf=0;
+  if(seen||reduce||!window.gsap){ done(); return; }
+
+  /* LED dot matrix: dots light in a diagonal wave, then a sweeping highlight keeps them alive */
+  var cv=document.getElementById('matrix'), cx=cv.getContext('2d'), W=0,H=0,cols=0,rows=0,gap=26,t0=performance.now(),reveal=0;
+  function size(){ var d=Math.min(devicePixelRatio||1,2); W=innerWidth;H=innerHeight; cv.width=W*d;cv.height=H*d; cx.setTransform(d,0,0,d,0,0); cols=Math.ceil(W/gap)+1; rows=Math.ceil(H/gap)+1; }
+  size(); addEventListener('resize',size);
+  function draw(now){
+    var t=(now-t0)/1000; cx.clearRect(0,0,W,H);
+    for(var r=0;r<rows;r++)for(var c=0;c<cols;c++){
+      var x=c*gap+gap/2,y=r*gap+gap/2;
+      var diag=(c/cols+r/rows)/2;            // 0..1 across the screen
+      var on=Math.max(0,Math.min(1,(reveal*1.25-diag)*4)); // wave-in
+      var sweep=Math.max(0,1-Math.abs(((t*0.35)%1.6)-0.3-(c/cols))*5);
+      var a=on*(0.10+0.55*sweep);
+      var yellow=((c*7+r*13)%29===0)&&on>0;
+      cx.beginPath(); cx.arc(x,y,2.2+on*1.4*sweep,0,6.283);
+      cx.fillStyle=yellow?'rgba(255,200,0,'+(0.25+0.7*on)+')':'rgba(244,246,255,'+a+')'; cx.fill();
+    }
+    raf=requestAnimationFrame(draw);
+  }
+  raf=requestAnimationFrame(draw);
+
+  /* logo letters */
+  var logo=document.getElementById('logo'), txt='IMPACT LED';
+  txt.split('').forEach(function(ch,i){ var s=document.createElement('span'); s.textContent=ch===' '?' ':ch; if(i>=7)s.className='led'; s.setAttribute('aria-hidden','true'); logo.appendChild(s); });
+  var letters=logo.querySelectorAll('span'), st=document.getElementById('status'), fill=document.querySelector('#bar i');
+  var msgs=['Powering up panels','Calibrating modules','Loading walkthroughs','Ready'];
+  var prog={v:0,m:0};
+
+  function exit(){
+    if(closed)return;
+    tl0.kill(); gsap.killTweensOf([letters,'.led','#enter','#scan','#bar',fill,'#sub','#status']);
+    var ex=gsap.timeline({onComplete:done});
+    ex.to('#flash',{y:'0%',duration:.38,ease:'power3.in'})
+      .add(function(){ launch.style.display='none'; })
+      .set(home,{opacity:1})
+      .to('#flash',{y:'-100%',duration:.5,ease:'power3.out'})
+      .from('.hd > *',{y:30,opacity:0,duration:.5,stagger:.08,ease:'power3.out'},'-=.3')
+      .from('.key span',{scale:.6,opacity:0,duration:.3,stagger:.06,ease:'back.out(2)'},'-=.3')
+      .from('.card',{y:40,opacity:0,duration:.45,stagger:.045,ease:'power3.out',clearProps:'transform,opacity'},'-=.3')
+      .from('.grp h2',{x:-20,opacity:0,duration:.4,stagger:.1,clearProps:'transform,opacity'},'-=.9');
+  }
+
+  gsap.set(home,{opacity:0});
+  var tl0,tl=tl0=gsap.timeline({defaults:{ease:'power2.out'}});
+  tl.to({}, {duration:.2})
+    .to({v:0},{v:1,duration:1.6,ease:'none',onUpdate:function(){ reveal=this.targets()[0].v; }})
+    .to('#scan',{top:'100%',duration:1.5,ease:'none'},0.2)
+    .fromTo(letters,{opacity:0,y:40,scale:.6},{opacity:1,y:0,scale:1,duration:.5,stagger:.07,ease:'back.out(2)'},.5)
+    .to('.led',{keyframes:{opacity:[1,.35,1,.5,1]},duration:.5,stagger:.06},1.4)
+    .to('#sub',{opacity:1,letterSpacing:'.42em',duration:.7},1.3)
+    .to('#bar',{opacity:1,duration:.3},1.5)
+    .to('#status',{opacity:.9,duration:.3},1.5)
+    .to(fill,{width:'100%',duration:1.7,ease:'power1.inOut',
+      onUpdate:function(){ var p=this.progress(); var i=Math.min(msgs.length-2,Math.floor(p*(msgs.length-1))); st.textContent=msgs[i]+' '+Math.round(p*100)+'%'; }},1.6)
+    .add(function(){ st.textContent=msgs[3]; },3.3)
+    .to('#bar',{opacity:0,duration:.3},3.3)
+    .set('#enter',{visibility:'visible'},3.4)
+    .to('#enter',{opacity:1,y:0,duration:.4},3.4)
+    .fromTo('#enter',{boxShadow:'0 0 0 0 rgba(255,200,0,.7)'},{boxShadow:'0 0 0 22px rgba(255,200,0,0)',duration:1.2,repeat:-1,ease:'power1.out'},3.6);
+
+  document.getElementById('enter').addEventListener('click',function(e){e.stopPropagation();exit();});
+  document.getElementById('skip').addEventListener('click',function(e){e.stopPropagation();exit();});
+  addEventListener('keydown',function(e){ if(!closed&&(e.key==='Enter'||e.key===' '||e.key==='Escape')){e.preventDefault();exit();} });
+  launch.addEventListener('click',function(){ if(tl.progress()>.95)exit(); });
+  document.getElementById('enter').focus({preventScroll:true});
+})();
+</script>
+</body>
+</html>

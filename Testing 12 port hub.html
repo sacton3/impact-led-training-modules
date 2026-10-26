@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Testing the 12-port hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --panel:#F4F5F8; --panel-ink:#14161C; --pass:#0B8F4D; --fail:#C81E24;
+  --bg:#2336D8; --fg:#F4F6FF;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+}
+:root[data-theme="dark"]{ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+
+*,*::before,*::after{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid currentColor;outline-offset:3px}
+
+#app{min-height:100%;display:grid;grid-template-columns:minmax(0,1fr);gap:18px 28px;padding:18px clamp(14px,3vw,36px) 22px}
+@media (min-width:900px){
+  #app{height:100%;grid-template-columns:190px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+  header,footer{grid-column:1 / -1}
+}
+
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+h1{margin:0;font-family:Archivo,"Helvetica Neue",Arial,sans-serif;font-weight:800;font-stretch:112%;font-size:clamp(20px,2.4vw,28px);letter-spacing:-.01em}
+#models{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;flex-direction:column;align-items:flex-start;border:2px solid currentColor;background:transparent;border-radius:14px;padding:6px 14px;min-height:44px;line-height:1.15;transition:background-color .2s,color .2s}
+.chip b{font-family:Archivo,sans-serif;font-weight:800;font-size:15px}
+.chip small{font-size:12px;opacity:.85}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+#rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+#rail button{display:flex;align-items:baseline;gap:12px;width:100%;text-align:left;background:none;border:0;border-left:5px solid transparent;padding:9px 0 9px 12px;opacity:.5;transition:opacity .2s}
+#rail button:hover{opacity:.85}
+#rail button.on{opacity:1;border-left-color:currentColor}
+#rail .n{font-family:Archivo,sans-serif;font-weight:800;font-size:22px;min-width:1.1em}
+#rail .t{font-size:16px;font-weight:700}
+@media (max-width:899px){
+  #rail ol{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px}
+  #rail button{border-left:0;border-bottom:4px solid transparent;padding:6px 10px;white-space:nowrap;width:auto}
+  #rail button.on{border-bottom-color:currentColor}
+}
+
+#stage{position:relative;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:center}
+@media (min-width:900px){ #stage{grid-template-columns:minmax(0,1fr) 350px} }
+#plateWrap{min-height:0;height:100%;display:flex;align-items:center;justify-content:center}
+#plateWrap svg{width:100%;height:auto;max-height:100%;overflow:hidden}
+svg text{font-family:"Atkinson Hyperlegible",system-ui,sans-serif}
+.ar{font-family:Archivo,"Helvetica Neue",Arial,sans-serif !important}
+
+/* instrument panel */
+#meter{background:var(--panel);color:var(--panel-ink);border:3px solid var(--panel-ink);border-radius:22px;padding:16px 18px 18px;display:flex;flex-direction:column;gap:10px}
+.mode{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{display:inline-block;border:2px solid var(--panel-ink);border-radius:999px;font-weight:700;font-size:14px;padding:5px 12px;background:var(--panel-ink);color:var(--panel)}
+.note{font-size:13px;opacity:.7}
+.read{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-height:1em}
+#num{font-family:Archivo,sans-serif;font-weight:800;font-stretch:105%;font-size:clamp(56px,6vw,84px);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+#unit{font-family:Archivo,sans-serif;font-weight:700;font-size:26px}
+#status{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:16px;color:var(--panel-ink)}
+#status::before{content:"";width:12px;height:12px;border-radius:50%;background:currentColor;opacity:.35}
+#meter[data-state="pass"] #status{color:var(--pass)}
+#meter[data-state="pass"] #status::before{opacity:1}
+#meter[data-state="fail"] #status{color:var(--fail)}
+#meter[data-state="fail"] #status::before{opacity:1}
+.gauge{position:relative;height:78px;margin:4px 8px 0}
+.gauge .bar{position:absolute;left:0;right:0;top:27px;height:14px;border-radius:7px;background:color-mix(in srgb,var(--panel-ink) 16%,transparent)}
+#zone{position:absolute;top:23px;height:22px;border-radius:5px;background:var(--pass)}
+#marker{position:absolute;top:7px;width:4px;height:54px;margin-left:-2px;border-radius:2px;background:var(--panel-ink);opacity:0}
+#marker::before{content:"";position:absolute;top:-5px;left:50%;width:12px;height:12px;background:inherit;transform:translateX(-50%) rotate(45deg)}
+#meter[data-state="fail"] #marker{background:var(--fail)}
+.tick{position:absolute;top:54px;transform:translateX(-50%);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+#rule{font-size:14px;opacity:.8}
+.slide{display:flex;flex-direction:column;gap:4px;font-size:13px;opacity:.9}
+.slide input{width:100%;accent-color:var(--panel-ink)}
+.slide input:disabled{opacity:.35}
+
+/* paperwork flow */
+#verdict{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;align-content:center;visibility:hidden;opacity:0}
+.vh{font-family:Archivo,sans-serif;font-weight:800;font-size:clamp(16px,1.8vw,22px);padding:0 4px}
+.vc{border-radius:16px;padding:14px 18px;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(16px,1.7vw,24px);line-height:1.2;color:#fff}
+.vc.pass{background:#0B8F4D}
+.vc.fail{background:#C81E24}
+.vc.merge{grid-column:1 / -1;background:transparent;color:inherit;border:3px solid currentColor}
+.conn{width:4px;height:20px;background:currentColor;margin:0 auto;transform-origin:top center}
+
+footer{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 28px}
+#cap{margin:0;flex:1 1 320px;max-width:62ch;min-height:3.6em;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(20px,2.2vw,30px);line-height:1.18}
+.w{display:inline-block;white-space:pre}
+#ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:2px solid currentColor;background:transparent;border-radius:999px;padding:9px 18px;min-height:44px;font-weight:700;font-size:16px}
+.btn:disabled{opacity:.35;cursor:default}
+.btn.go{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn[aria-pressed="true"]{box-shadow:inset 0 0 0 3px currentColor}
+#num.word{font-size:clamp(34px,3.8vw,50px)}
+#pick{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;font-weight:700}
+#pick button{border:2px solid var(--panel-ink);background:transparent;color:var(--panel-ink);border-radius:999px;padding:4px 12px;min-height:32px}
+#pick button[aria-pressed="true"]{background:var(--panel-ink);color:var(--panel)}
+#outcome{font-size:15px;font-weight:700;min-height:2.6em}
+
+#checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700}
+#checks li{display:flex;gap:10px;align-items:flex-start;opacity:.55}
+#checks .bx{flex:none;width:18px;height:18px;border:2px solid var(--panel-ink);border-radius:5px;margin-top:1px;position:relative}
+#checks li[data-s="now"]{opacity:1}
+#checks li[data-s="ok"]{opacity:1}
+#checks li[data-s="ok"] .bx{background:var(--pass);border-color:var(--pass)}
+#checks li[data-s="ok"] .bx::after{content:"";position:absolute;left:4px;top:0;width:5px;height:10px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+#checks li[data-s="bad"]{opacity:1;color:var(--fail)}
+#checks li[data-s="bad"] .bx{background:var(--fail);border-color:var(--fail)}
+#checks li[data-s="bad"] .bx::after{content:"\00D7";position:absolute;inset:-4px 0 0 0;text-align:center;color:#fff;font-size:17px;line-height:20px}
+#num,#unit,#status,.gauge,#rule,.slide,.read{display:none}</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Testing the 12-port hub</h1>
+    <div id="models" role="group" aria-label="Hub"></div>
+  </header>
+  <nav id="rail" aria-label="Steps"><ol></ol></nav>
+  <main id="stage">
+    <div id="plateWrap">
+      <svg viewBox="0 0 800 340" role="img" aria-label="12-port hub with an i5+ receive card, power, data and a module">
+        <defs><linearGradient id="pcb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#23A064"/><stop offset="1" stop-color="#157046"/></linearGradient>
+<linearGradient id="blk" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2b2e34"/><stop offset="1" stop-color="#14161a"/></linearGradient>
+<linearGradient id="silver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2F4F6"/><stop offset=".5" stop-color="#C5CAD1"/><stop offset="1" stop-color="#8E959E"/></linearGradient>
+<linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9C27A"/><stop offset="1" stop-color="#9c8340"/></linearGradient>
+<filter id="noise" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="1" seed="7"/><feColorMatrix type="matrix" values="1.6 0 0 0 -.2  1.6 0 0 0 -.2  1.6 0 0 0 -.2  0 0 0 0 1"/></filter>
+          <linearGradient id="fadeG" gradientUnits="userSpaceOnUse" x1="0" y1="300" x2="0" y2="340"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
+          <mask id="fadeM" maskUnits="userSpaceOnUse" x="-200" y="-200" width="1400" height="1000"><rect x="-200" y="-200" width="1400" height="1000" fill="url(#fadeG)"/></mask>
+          <filter id="blur" x="-10%" y="-200%" width="120%" height="500%"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+        
+<g id="psu"><rect x="20" y="92" width="92" height="64" rx="6" fill="url(#silver)" stroke="#6e747d" stroke-width="2"/><text class="ar" x="66" y="120" font-size="13" font-weight="800" fill="#14161C" text-anchor="middle">Power</text><text class="ar" x="66" y="138" font-size="13" font-weight="800" fill="#14161C" text-anchor="middle">supply</text></g>
+<g id="ctl"><rect x="20" y="172" width="112" height="76" rx="8" fill="#F4F5F8" stroke="#14161C" stroke-width="3"/><text class="ar" x="76" y="204" font-size="14" font-weight="800" fill="#14161C" text-anchor="middle">Controller</text><text x="76" y="224" font-size="11" font-weight="700" fill="#14161C" text-anchor="middle">Test pattern</text></g>
+<g id="hub"></g>
+<g id="wires">
+  <g class="pw"><path d="M112 115 H206" fill="none" stroke="#8b919b" stroke-width="13" stroke-linecap="round"/><path d="M112 115 H206" fill="none" stroke="#E02B2B" stroke-width="7" stroke-linecap="round"/></g>
+  <g class="pw"><path d="M112 145 H206" fill="none" stroke="#8b919b" stroke-width="13" stroke-linecap="round"/><path d="M112 145 H206" fill="none" stroke="#111" stroke-width="7" stroke-linecap="round"/></g>
+  <path class="fl" d="M112 115 H206" fill="none" stroke="#FFC800" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 14" opacity="0"/>
+  <path class="fl" d="M112 145 H206" fill="none" stroke="#FFC800" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 14" opacity="0"/>
+  <path d="M132 192 H196" fill="none" stroke="#6FA8FF" stroke-width="8" stroke-linecap="round"/>
+  <path d="M198 226 H160 V270" fill="none" stroke="#2F3FFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path class="fl2" d="M132 192 H196" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="2 12" opacity="0"/>
+</g>
+<g id="module"></g>
+<path id="cab" d="" fill="none" stroke="#8B1E3F" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0"/>
+<g id="badges"></g><g id="legend"></g>
+
+        <g mask="url(#fadeM)">
+        <g id="probeB" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#15161a" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#15161a" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        <g id="probeR" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#E02B2B" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#E02B2B" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        </g>
+        <text id="tag" class="ar" x="780" y="322" font-size="20" font-weight="800" fill="currentColor" text-anchor="end" opacity="0"></text>
+        <g id="live" opacity="0">
+          <rect x="18" y="14" width="190" height="36" rx="18" fill="#14130C"/>
+          <circle id="liveDot" cx="40" cy="32" r="7" fill="#FFC800"/>
+          <text id="liveTxt" x="56" y="38" fill="#FFC800" font-size="17" font-weight="700">Mains live</text>
+        </g>
+      </svg>
+    </div>
+    <aside id="meter" data-state="idle" aria-label="Bench readout">
+      <div class="mode"><span class="pill" id="pill">Port check</span><span class="note">Example results</span></div>
+      <div class="read"><span id="num">---</span><span id="unit"></span></div>
+      <div id="status" aria-live="polite">Not measuring</div>
+      <div class="gauge" id="gauge" aria-hidden="true">
+        <div class="bar"></div><div id="zone"></div><div id="marker"></div>
+        <span class="tick" id="tickLo"></span><span class="tick" id="tickHi"></span>
+      </div>
+      <div id="rule"></div>
+      <label class="slide">Drag to try other readings
+        <input id="slider" type="range" min="0" max="1" step="0.01" value="0" disabled>
+      </label>
+      <ul id="checks" style="opacity:0;visibility:hidden"></ul>
+      <div id="pick" style="opacity:0;visibility:hidden"></div>
+      <div id="outcome" aria-live="polite"></div>
+    </aside>
+    <div id="verdict">
+      <div class="vh" data-row="0">Yes: every port shows a number</div>
+      <div class="vh" data-row="0">No: faulty</div>
+      <div class="conn" data-row="c0"></div><div class="conn" data-row="c0"></div>
+      <div class="vc pass" data-row="1">Label it NFF on documentation tape, with the ticket number.</div>
+      <div class="vc fail" data-row="1">Note the fault, plus the ticket or sales order number.</div>
+      <div class="conn" data-row="c1"></div><div class="conn" data-row="c1"></div>
+      <div class="vc merge" data-row="2">Record it in iGO under RMA Returned Parts, then on the Zoho Desk ticket. Check Move To is set to the refurbished inventory location. Mark the iGO order complete.</div>
+      <div class="conn" data-row="c2"></div><div class="conn" data-row="c2"></div>
+      <div class="vc pass" data-row="3">Shelve it as a refurbished part.</div>
+      <div class="vc fail" data-row="3">Crate it with the parts going to the manufacturer for warranty replacement.</div>
+    </div>
+  </main>
+  <footer>
+    <p id="cap" aria-live="polite"></p>
+    <div id="ctl">
+      <button class="btn" id="bBack">Back</button>
+      <button class="btn" id="bReplay">Replay step</button>
+      <button class="btn" id="bAuto" aria-pressed="false">Auto-play</button>
+      <button class="btn go" id="bNext">Next</button>
+    </div>
+  </footer>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+const NS='http://www.w3.org/2000/svg';
+const mk=(tag,attrs,parent)=>{const e=document.createElementNS(NS,tag);Object.keys(attrs||{}).forEach(k=>e.setAttribute(k,attrs[k]));if(parent)parent.appendChild(e);return e;};
+const root=document.documentElement;
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const THEMES={blue:{bg:'#2336D8',fg:'#F4F6FF'},yellow:{bg:'#FFC800',fg:'#14130C'},paper:{bg:'#E9ECF3',fg:'#14161C'}};
+let theme={...THEMES.blue};
+const hex=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+const toHex=s=>s.startsWith('#')?s:'#'+s.match(/\d+/g).map(v=>(+v).toString(16).padStart(2,'0')).join('');
+const mix=(a,b,t)=>{const x=hex(toHex(a)),y=hex(toHex(b));return 'rgb('+x.map((v,i)=>Math.round(v+(y[i]-v)*t)).join(',')+')';};
+function applyTheme(){root.style.setProperty('--bg',theme.bg);root.style.setProperty('--fg',theme.fg);}
+function themeTween(t,key,pos){
+  const from={...theme}, to=THEMES[key], p={t:0};
+  t.to(p,{t:1,duration:reduce?0.01:0.7,ease:'power2.inOut',onUpdate(){
+    theme={bg:mix(from.bg,to.bg,p.t),fg:mix(from.fg,to.fg,p.t)}; applyTheme();
+  },onComplete(){theme={...to};applyTheme();}},pos);
+}
+applyTheme();
+
+/* ---------- meter / gauge ---------- */
+const meter=$('#meter'),num=$('#num'),unitEl=$('#unit'),statusEl=$('#status'),zone=$('#zone'),marker=$('#marker'),
+      tickLo=$('#tickLo'),tickHi=$('#tickHi'),rule=$('#rule'),slider=$('#slider');
+const G={lo:0,hi:1,min:0,max:1,dec:1,unit:'V DC'}; const R={v:null}; const P={val:0};
+const pct=v=>Math.max(0,Math.min(100,(v-G.min)/(G.max-G.min)*100));
+const fmt=(v,d)=>v.toFixed(d);
+function configureGauge(lo,hi,dec,tdec,unit){
+  const span=hi-lo;
+  Object.assign(G,{lo,hi,min:lo-span*0.9,max:hi+span*0.9,dec,unit});
+  zone.style.left=pct(lo)+'%'; zone.style.width=(pct(hi)-pct(lo))+'%';
+  tickLo.style.left=pct(lo)+'%'; tickHi.style.left=pct(hi)+'%';
+  tickLo.textContent=fmt(lo,tdec); tickHi.textContent=fmt(hi,tdec);
+  rule.textContent='Pass: '+fmt(lo,tdec)+' to '+fmt(hi,tdec)+' '+unit;
+  slider.min=G.min; slider.max=G.max; slider.step=(G.max-G.min)/300;
+}
+function render(v){
+  R.v=v;
+  if(v==null){num.textContent='---';unitEl.textContent='';meter.dataset.state='idle';statusEl.textContent='Not measuring';marker.style.opacity=0;return;}
+  marker.style.opacity=1; marker.style.left=pct(v)+'%';
+  num.textContent=fmt(v,G.dec); unitEl.textContent=G.unit;
+  const ok=v>=G.lo-1e-9&&v<=G.hi+1e-9;
+  meter.dataset.state=ok?'pass':'fail';
+  statusEl.textContent=ok?'In range':(v<G.lo?'Too low':'Too high');
+  slider.value=v;
+}
+slider.addEventListener('input',()=>{gsap.killTweensOf(P); render(+slider.value); if(typeof MOD!=='undefined'&&MOD.onSlide)MOD.onSlide(+slider.value);});
+
+/* ---------- shared helpers ---------- */
+const setTag=text=>{const e=$('#tag');if(!e)return;e.textContent=text;gsap.fromTo(e,{autoAlpha:0,y:8},{autoAlpha:1,y:0,duration:.35});};
+const drawIn=(t,sel,at,d)=>t.to(sel,{strokeDashoffset:0,duration:d||.6,ease:'power3.out'},at);
+function prepDash(sel,drawn){ $$(sel).forEach(p=>{const L=Math.ceil(p.getTotalLength())+2;p.dataset.len=L;p.style.strokeDasharray=L;p.style.strokeDashoffset=drawn?0:L;}); }
+/* checklist in the panel */
+function setChecks(items){
+  const ul=$('#checks'); ul.innerHTML='';
+  (items||[]).forEach((txt,i)=>{const li=document.createElement('li');li.dataset.s='off';li.innerHTML='<span class="bx"></span><span>'+txt+'</span>';ul.appendChild(li);});
+  gsap.set('#checks',{autoAlpha:(items&&items.length)?1:0});
+}
+function check(i,state){ const li=$$('#checks li')[i]; if(li)li.dataset.s=state; }
+function allChecks(state){ $$('#checks li').forEach(li=>li.dataset.s=state); }
+/* option buttons in the panel */
+let pickCb=null;
+function setPick(label,opts,cur,cb){
+  const box=$('#pick'); pickCb=cb;
+  if(!opts){box.innerHTML='';gsap.set(box,{autoAlpha:0});return;}
+  box.innerHTML='<span>'+label+'</span>';
+  opts.forEach(o=>{const b=document.createElement('button');b.textContent=o[1];b.dataset.k=o[0];b.setAttribute('aria-pressed',o[0]===cur);
+    b.onclick=()=>{$$('#pick button').forEach(x=>x.setAttribute('aria-pressed',x===b));pickCb&&pickCb(o[0]);};box.appendChild(b);});
+}
+/* probes: two leads, black and red, tip at local 0,0 */
+const probeB=$('#probeB'),probeR=$('#probeR');
+if(probeB){gsap.set([probeB,probeR],{transformOrigin:'0px 0px'});}
+const PD=150;
+const axisV=th=>[-Math.sin(th*Math.PI/180),Math.cos(th*Math.PI/180)];
+function probeAt(el,p){gsap.set(el,{x:p[0],y:p[1],rotation:p[2],autoAlpha:1});}
+function probePark(el,p){const a=axisV(p[2]);gsap.set(el,{x:p[0]+a[0]*PD,y:p[1]+a[1]*PD,rotation:p[2],autoAlpha:0});}
+function probeIn(t,el,p,at,d){t.to(el,{x:p[0],y:p[1],rotation:p[2],autoAlpha:1,duration:d||1.1,ease:'power3.out'},at);}
+function probeOut(t,el,p,at){const a=axisV(p[2]);t.to(el,{x:p[0]+a[0]*PD,y:p[1]+a[1]*PD,autoAlpha:0,duration:.6,ease:'power2.in'},at);}
+const pulse=(sels,atTime,t)=>t.fromTo(sels,{scale:1},{scale:1.45,yoyo:true,repeat:1,duration:.17,transformOrigin:'50% 50%',ease:'power2.out'},atTime);
+
+const paperScene=t=>{
+  t.to(['#plateWrap','#meter'],{autoAlpha:0,y:-24,duration:.5,ease:'power2.in'},0);
+  t.set('#verdict',{autoAlpha:1},.5);
+  [0,1,2,3].forEach(r=>{
+    t.fromTo('#verdict [data-row="'+r+'"]',{y:24,autoAlpha:0},{y:0,autoAlpha:1,duration:.5,stagger:.12,ease:'power3.out'},.6+r*.75);
+    if(r<3) t.fromTo('#verdict [data-row="c'+r+'"]',{scaleY:0},{scaleY:1,duration:.3,ease:'none'},.6+r*.75+.45);
+  });
+};
+
+
+const ORDER=['intro','know','setup','module','ports','trouble','paper'];
+const TITLES={intro:'Why test',know:'Know the hub',setup:'Test image',module:'Hook up a module',ports:'Walk the ports',trouble:'Troubleshoot',paper:'Paperwork'};
+const THEME_OF={intro:'blue',know:'blue',setup:'blue',module:'blue',ports:'blue',trouble:'blue',paper:'paper'};
+const CAP={
+  intro:m=>'The 12-port hub works with an i5+ receive card to put images on 3rd Gen EMCs. To test the hub, push a test pattern through it and check every port.',
+  know:m=>'Learn the hub before you test it. Power and data come in on the left, 12 module ports carry the image, and the grey connector powers the fans.',
+  setup:m=>'Upload a test image to the playlist on the controller. The Test Pattern page in the Operations folder will generate one. Power the card and make sure the right configuration is on it.',
+  module:m=>'Take a compatible module and hook it to power and to a data port on the card. One of the numbers should appear on the module.',
+  ports:m=>'Pull the 10-pin Ethernet from the card and plug it into the next port. Every port should show a different part of the image: a different number each time.',
+  trouble:m=>'Something off? Duplicated numbers, or blank and static ports, mean replacing the card. Nothing on any port: check the config, power and playlist, then try the receive card in a working hub.',
+  paper:m=>'Tag it, log it, then send it where it belongs: the shelf if it is good, the manufacturer crate if it is faulty.'
+};
+const S={res:'good'};
+const hubG=$('#hub'), modG=$('#module'), badges=$('#badges'), legend=$('#legend');
+const PX=i=>250+(i%6)*62, PY=i=>i<6?80:250;
+const CALL=[
+ {col:'#E02B2B',k:'#E02B2B',txt:'+VDC',b:[212,66],t:[208,100]},
+ {col:'#14161C',k:'#fff',txt:'−VDC',b:[158,126],t:[200,142]},
+ {col:'#6FA8FF',k:'#14161C',txt:'Incoming data (Ethernet)',b:[160,160],t:[200,186]},
+ {col:'#2F3FFF',k:'#fff',txt:'Outgoing data (Ethernet)',b:[170,250],t:[204,230]},
+ {col:'#8B1E3F',k:'#fff',txt:'Module data (RJ50 10p10c): all ports usable',b:[600,150],t:[560,102]},
+ {col:'#9AA0A9',k:'#14161C',txt:'Outgoing power to fans',b:[620,214],t:[624,170]}];
+function buildHub(){
+  hubG.innerHTML='';
+  const g=mk('g',{},hubG);
+  mk('rect',{x:190,y:50,width:450,height:230,rx:8,fill:'url(#pcb)',stroke:'#0b3d27','stroke-width':2.5},g);
+  [[202,62],[628,62],[202,268],[628,268]].forEach(h=>mk('circle',{cx:h[0],cy:h[1],r:5,fill:'#e6e8ea',stroke:'#0b3d27'},g));
+  for(let i=0;i<12;i++){
+    const x=PX(i),y=PY(i);
+    mk('rect',{x:x-22,y:y-17,width:44,height:34,rx:3,fill:'#14161a',stroke:'#000'},g);
+    mk('rect',{x:x-16,y:y-11,width:32,height:22,rx:2,fill:'#2a2d33'},g);
+    for(let k=0;k<5;k++)mk('rect',{x:x-12+k*5,y:y+(i<6?2:-9),width:2.2,height:7,fill:'#C9A227'},g);
+    const t=mk('text',{x:x,y:i<6?y+31:y-22,'font-size':12,'font-weight':800,fill:'#fff','text-anchor':'middle',class:'ar'},g);t.textContent=i+1;
+  }
+  mk('rect',{x:300,y:122,width:230,height:86,rx:6,fill:'url(#gold)',stroke:'#6b5a24','stroke-width':2},g);
+  mk('rect',{x:312,y:132,width:90,height:66,rx:3,fill:'#14161a'},g);
+  mk('rect',{x:412,y:138,width:104,height:18,rx:2,fill:'#14161a'},g);
+  const t=mk('text',{x:464,y:186,'font-size':14,'font-weight':800,fill:'#2b2410','text-anchor':'middle',class:'ar'},g);t.textContent='i5+ receive card';
+  mk('circle',{id:'hled',cx:520,cy:190,r:4.5,fill:'#143f2a',stroke:'#0b3d27'},g);
+  mk('rect',{x:176,y:98,width:34,height:60,rx:3,fill:'url(#blk)'},g);
+  [[207,115],[207,145]].forEach(s=>{mk('circle',{cx:s[0],cy:s[1],r:8,fill:'url(#silver)',stroke:'#4b5058'},g);});
+  [192,226].forEach((y,i)=>{mk('rect',{x:186,y:y-15,width:44,height:30,rx:2,fill:'url(#silver)',stroke:'#6e747d'},g);mk('rect',{x:192,y:y-9,width:30,height:19,rx:2,fill:'#14161a'},g);});
+  mk('rect',{x:616,y:140,width:30,height:34,rx:3,fill:'#E9ECF1',stroke:'#9AA0A9','stroke-width':2},g);
+  const f=mk('text',{x:631,y:196,'font-size':11,'font-weight':800,fill:'#E8F5EE','text-anchor':'middle',class:'ar'},g);f.textContent='FANS';
+}
+function buildModule(){
+  modG.innerHTML='';
+  const x=690,y=104,w=96,h=116; const g=mk('g',{},modG);
+  mk('rect',{x:x,y:y,width:w,height:h,rx:6,fill:'#0d0e10',stroke:'#C9CDD4','stroke-width':2.5},g);
+  for(let r=0;r<8;r++)for(let c=0;c<6;c++)mk('circle',{cx:x+10+c*15.2,cy:y+10+r*13.7,r:2.4,fill:'#2f3238'},g);
+  const n=mk('text',{id:'modNum',x:x+w/2,y:y+h/2+22,class:'ar','font-size':64,'font-weight':900,fill:'#FFC800','text-anchor':'middle',opacity:0},g);n.textContent='1';
+  mk('rect',{id:'modSt',x:x+3,y:y+3,width:w-6,height:h-6,rx:4,fill:'#888',filter:'url(#noise)',opacity:0},g);
+  const t=mk('text',{x:x+w/2,y:y+h+18,class:'ar','font-size':13,'font-weight':700,fill:'currentColor','text-anchor':'middle'},g);t.textContent='Module';
+}
+function cabD(i){const x=PX(i); return i<6?'M'+x+' 63 V34 H738 V104':'M'+x+' 267 V306 H738 V220';}
+function buildCallouts(){
+  badges.innerHTML=''; legend.innerHTML='';
+  CALL.forEach((c,i)=>{
+    const g=mk('g',{class:'bdg b'+i},badges);
+    mk('line',{x1:c.b[0],y1:c.b[1],x2:c.t[0],y2:c.t[1],stroke:c.col,'stroke-width':3,'stroke-linecap':'round'},g);
+    mk('circle',{cx:c.b[0],cy:c.b[1],r:10,fill:c.col,stroke:'#fff','stroke-width':2},g);
+    const tx=mk('text',{x:c.b[0],y:c.b[1]+4.5,'font-size':13,'font-weight':800,fill:c.k,'text-anchor':'middle'},g);tx.textContent=i+1;
+    const col=i<3?0:1,row=i%3; const lg=mk('g',{class:'lgd l'+i},legend), lx=col?420:40, ly=296+row*17;
+    mk('circle',{cx:lx+8,cy:ly-5,r:8,fill:c.col,stroke:'#fff','stroke-width':1.5},lg);
+    const nt=mk('text',{x:lx+8,y:ly-1,'font-size':11,'font-weight':800,fill:c.k,'text-anchor':'middle'},lg);nt.textContent=i+1;
+    const lt=mk('text',{x:lx+24,y:ly,'font-size':13,'font-weight':700,fill:'currentColor'},lg);lt.textContent=c.txt;
+  });
+}
+const dashFlow=reduce?null:gsap.to({o:0},{o:-32,duration:1.1,repeat:-1,ease:'none',onUpdate(){const o=this.targets()[0].o;$$('.fl,.fl2').forEach(p=>p.style.strokeDashoffset=o);}});
+const showPort=(i,mode)=>{
+  /* what the module shows for port i (0 based) under a given result mode */
+  const el=$('#modNum'); gsap.set('#modSt',{opacity:0}); gsap.set(el,{opacity:1});
+  let n=String(i+1);
+  if(mode==='dup'&&i===4) n='4';
+  if(mode==='static'&&(i===6||i===7)){gsap.set(el,{opacity:0});gsap.set('#modSt',{opacity:1});}
+  if(mode==='none'){gsap.set(el,{opacity:0});}
+  el.textContent=n;
+};
+function walk(t,mode,start,gap){
+  for(let i=0;i<12;i++){
+    const at=start+i*gap;
+    t.call(()=>{$('#cab').setAttribute('d',cabD(i));gsap.set('#cab',{opacity:1});showPort(i,mode);},null,at);
+  }
+}
+const MOD={ORDER,TITLES,THEME_OF,CAP,model:{},SLIDER:[],
+  init(){buildHub();buildModule();buildCallouts();},
+  kill(){gsap.killTweensOf(['#cab','#modNum','#modSt']);},
+  prep(id){
+    const pos=ORDER.indexOf(id);
+    gsap.set(['#psu','#ctl','#hub','#wires','#module'],{autoAlpha:pos>0?1:0,y:0});
+    gsap.set('.bdg,.lgd',{autoAlpha:0}); gsap.set('#cab',{opacity:0}); gsap.set('#modNum,#modSt',{opacity:0});
+    const on=pos>=2; gsap.set('#hled',{fill:on?'#35E27A':'#143f2a'}); gsap.set('.fl',{opacity:on?1:0}); gsap.set('.fl2',{opacity:on?1:0});
+    $('#outcome').textContent='';
+    if(id==='setup'){ gsap.set('#hled',{fill:'#143f2a'}); gsap.set('.fl,.fl2',{opacity:0}); setChecks(['Test image in the controller playlist','Card powered, right configuration uploaded']); }
+    if(id==='module'){ $('#cab').setAttribute('d',cabD(0)); setChecks(['Module has power and data from the card','A number shows on the module']); }
+    if(id==='ports'){ setChecks(['Port 1 shows a number','Every port shows a different number','No port blank or showing static']);
+      setPick('Example hub',[['good','Good'],['dup','Duplicated'],['static','Static'],['none','Nothing']],S.res,v=>{S.res=v;go(cur);}); gsap.set('#pick',{autoAlpha:0}); }
+    if(id==='trouble'){ setPick('Symptom',[['dup','Duplicated numbers'],['static','Black or static'],['none','No ports show']],S.res==='good'?'dup':S.res,v=>{S.res=v;go(cur);}); gsap.set('#pick',{autoAlpha:0}); }
+  },
+  scenes:{
+    intro(t){
+      t.fromTo(['#psu','#ctl','#hub','#wires','#module'],{y:40,autoAlpha:0},{y:0,autoAlpha:1,duration:.8,ease:'power3.out',stagger:.06},.2);
+      t.fromTo('#meter',{x:40,autoAlpha:0},{x:0,autoAlpha:1,duration:.7,ease:'power3.out'},.5);
+    },
+    know(t){
+      CALL.forEach((c,i)=>{
+        t.fromTo('.b'+i,{scale:0,autoAlpha:0,svgOrigin:c.b[0]+' '+c.b[1]},{scale:1,autoAlpha:1,duration:.4,ease:'back.out(2.2)'},.4+i*.55);
+        t.fromTo('.l'+i,{x:-10,autoAlpha:0},{x:0,autoAlpha:1,duration:.4},.5+i*.55);
+      });
+    },
+    setup(t){
+      t.call(()=>setTag('Operations folder > Test Pattern page'),null,.4);
+      t.call(()=>check(0,'ok'),null,1.4);
+      t.fromTo('.fl',{opacity:0},{opacity:1,duration:.3},2.0);
+      t.call(()=>{gsap.set('#hled',{fill:'#35E27A'});},null,2.4);
+      t.fromTo('.fl2',{opacity:0},{opacity:1,duration:.3},2.6);
+      t.call(()=>{check(1,'ok');setTag('Trouble uploading? Try a working hub');$('#outcome').textContent='The i5+ is updated through the hub itself, so a hub that will not take an upload may be the fault.';},null,3.6);
+    },
+    module(t){
+      t.fromTo('#cab',{opacity:0},{opacity:1,duration:.4},.5);
+      t.call(()=>{showPort(0,'good');check(0,'ok');},null,1.4);
+      t.call(()=>check(1,'ok'),null,2.0);
+      t.call(()=>setTag('Any number is fine'),null,2.2);
+    },
+    ports(t){
+      t.call(()=>setTag('Move the cable one port at a time'),null,.3);
+      walk(t,S.res,.8,.55);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.8);
+      t.call(()=>{
+        const r=S.res;
+        check(0,r==='none'?'bad':'ok'); check(1,r==='dup'?'bad':(r==='none'?'bad':'ok')); check(2,(r==='static'||r==='none')?'bad':'ok');
+        $('#outcome').textContent=({good:'Every port shows a different number: the hub is good.',dup:'Port 5 repeats port 4: duplicated data.',static:'Ports 7 and 8 show static.',none:'Nothing on any port.'})[r];
+      },null,.8+12*.55+.2);
+    },
+    trouble(t){
+      const r=S.res==='good'?'dup':S.res;
+      t.call(()=>{$('#cab').setAttribute('d',cabD(r==='dup'?4:6));gsap.set('#cab',{opacity:1});showPort(r==='dup'?4:6,r);},null,.4);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.6);
+      t.call(()=>{
+        $('#outcome').textContent=({dup:'Rare. If it is in a sign, confirm the setup first; unused ports can mimic another card. Setup right and still duplicated: replace the card.',static:'Some ports blank or static while the others are fine: replace the card.',none:'Check config, power and playlist. Then swap the receive card into a working hub: if it works there, the hub is bad.'})[r];
+        setTag(({dup:'Duplicated numbers',static:'Black or static on some ports',none:'No ports showing'})[r]);
+      },null,1.2);
+    },
+    paper:paperScene
+  }
+};
+
+/* ---------- player ---------- */
+let steps=MOD.ORDER.slice(), cur=0, tl=null, auto=false, autoCall=null;
+function renderChips(){
+  const box=$('#models'); box.innerHTML='';
+  if(!MOD.MODELS){return;}
+  Object.values(MOD.MODELS).forEach(m=>{
+    const b=document.createElement('button'); b.className='chip'; b.setAttribute('aria-pressed',m===MOD.model);
+    b.innerHTML='<b>'+m.name+'</b><small>'+m.gen+'</small>'; b.onclick=()=>{MOD.model=m;renderChips();go(cur);}; box.appendChild(b);
+  });
+}
+function renderRail(){
+  const ol=$('#rail ol'); ol.innerHTML='';
+  steps.forEach((id,i)=>{
+    const li=document.createElement('li'); const b=document.createElement('button');
+    b.className=i===cur?'on':''; if(i===cur)b.setAttribute('aria-current','step');
+    b.innerHTML='<span class="n">'+(i+1)+'</span><span class="t">'+MOD.TITLES[id]+'</span>'; b.onclick=()=>go(i);
+    li.appendChild(b); ol.appendChild(li);
+  });
+}
+const cap=$('#cap');
+function caption(t,text){
+  cap.innerHTML='';
+  text.split(' ').forEach((w,i,a)=>{const s=document.createElement('span');s.className='w';s.textContent=w+(i<a.length-1?' ':'');cap.appendChild(s);});
+  t.fromTo(cap.children,{y:16,autoAlpha:0},{y:0,autoAlpha:1,duration:.4,stagger:.03,ease:'power2.out'},.2);
+}
+function setBtns(){ $('#bBack').disabled=cur===0; $('#bNext').textContent=cur===steps.length-1?'Restart':'Next'; }
+function done(id){
+  slider.disabled=!(MOD.SLIDER||[]).includes(id);
+  if(MOD.done)MOD.done(id);
+  if(autoCall){autoCall.kill();autoCall=null;}
+  if(auto&&cur<steps.length-1) autoCall=gsap.delayedCall(2.8,()=>go(cur+1));
+}
+function baseReset(){
+  gsap.set(['#plateWrap','#meter'],{autoAlpha:1,x:0,y:0});
+  gsap.set('#verdict',{autoAlpha:0});
+  gsap.set('#live',{autoAlpha:0,y:0});
+  gsap.set('#tag',{autoAlpha:0,y:0});
+  slider.disabled=true; gsap.killTweensOf(P);
+  if(probeB){probePark(probeB,[0,0,0]);probePark(probeR,[0,0,0]);}
+  configureGauge(...(MOD.gaugeCfg?MOD.gaugeCfg():[0,1,2,1,'V DC'])); render(null);
+  setPick('',null); setChecks([]);
+}
+function go(i){
+  i=Math.max(0,Math.min(steps.length-1,i));
+  if(tl)tl.kill(); if(autoCall){autoCall.kill();autoCall=null;}
+  gsap.killTweensOf(['#tag']);
+  if(MOD.kill)MOD.kill();
+  cur=i; const id=steps[i];
+  renderRail(); baseReset(); MOD.prep(id);
+  tl=gsap.timeline({onComplete:()=>done(id)});
+  themeTween(tl,MOD.THEME_OF[id],0);
+  caption(tl,MOD.CAP[id](MOD.model));
+  MOD.scenes[id](tl);
+  setBtns();
+  if(reduce) tl.progress(1);
+}
+$('#bNext').onclick=()=>go(cur===steps.length-1?0:cur+1);
+$('#bBack').onclick=()=>go(cur-1);
+$('#bReplay').onclick=()=>go(cur);
+$('#bAuto').onclick=function(){
+  auto=!auto; this.setAttribute('aria-pressed',auto);
+  if(auto&&tl&&!tl.isActive()&&cur<steps.length-1&&!autoCall) autoCall=gsap.delayedCall(1.2,()=>go(cur+1));
+  if(!auto&&autoCall){autoCall.kill();autoCall=null;}
+};
+document.addEventListener('keydown',e=>{
+  if(e.target&&e.target.type==='range')return;
+  if(e.key==='ArrowRight')go(cur+1); else if(e.key==='ArrowLeft')go(cur-1); else if(e.key==='r'||e.key==='R')go(cur);
+});
+if(MOD.init)MOD.init();
+renderChips(); go(0);
+
+})();
+</script>
+</body>
+</html>

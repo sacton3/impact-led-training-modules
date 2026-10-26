@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cradlepoint modems</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --panel:#F4F5F8; --panel-ink:#14161C; --pass:#0B8F4D; --fail:#C81E24;
+  --bg:#2336D8; --fg:#F4F6FF;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+}
+:root[data-theme="dark"]{ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+
+*,*::before,*::after{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid currentColor;outline-offset:3px}
+
+#app{min-height:100%;display:grid;grid-template-columns:minmax(0,1fr);gap:18px 28px;padding:18px clamp(14px,3vw,36px) 22px}
+@media (min-width:900px){
+  #app{height:100%;grid-template-columns:190px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+  header,footer{grid-column:1 / -1}
+}
+
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+h1{margin:0;font-family:Archivo,"Helvetica Neue",Arial,sans-serif;font-weight:800;font-stretch:112%;font-size:clamp(20px,2.4vw,28px);letter-spacing:-.01em}
+#models{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;flex-direction:column;align-items:flex-start;border:2px solid currentColor;background:transparent;border-radius:14px;padding:6px 14px;min-height:44px;line-height:1.15;transition:background-color .2s,color .2s}
+.chip b{font-family:Archivo,sans-serif;font-weight:800;font-size:15px}
+.chip small{font-size:12px;opacity:.85}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+#rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+#rail button{display:flex;align-items:baseline;gap:12px;width:100%;text-align:left;background:none;border:0;border-left:5px solid transparent;padding:9px 0 9px 12px;opacity:.5;transition:opacity .2s}
+#rail button:hover{opacity:.85}
+#rail button.on{opacity:1;border-left-color:currentColor}
+#rail .n{font-family:Archivo,sans-serif;font-weight:800;font-size:22px;min-width:1.1em}
+#rail .t{font-size:16px;font-weight:700}
+@media (max-width:899px){
+  #rail ol{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px}
+  #rail button{border-left:0;border-bottom:4px solid transparent;padding:6px 10px;white-space:nowrap;width:auto}
+  #rail button.on{border-bottom-color:currentColor}
+}
+
+#stage{position:relative;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:center}
+@media (min-width:900px){ #stage{grid-template-columns:minmax(0,1fr) 350px} }
+#plateWrap{min-height:0;height:100%;display:flex;align-items:center;justify-content:center}
+#plateWrap svg{width:100%;height:auto;max-height:100%;overflow:hidden}
+svg text{font-family:"Atkinson Hyperlegible",system-ui,sans-serif}
+.ar{font-family:Archivo,"Helvetica Neue",Arial,sans-serif !important}
+
+/* instrument panel */
+#meter{background:var(--panel);color:var(--panel-ink);border:3px solid var(--panel-ink);border-radius:22px;padding:16px 18px 18px;display:flex;flex-direction:column;gap:10px}
+.mode{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{display:inline-block;border:2px solid var(--panel-ink);border-radius:999px;font-weight:700;font-size:14px;padding:5px 12px;background:var(--panel-ink);color:var(--panel)}
+.note{font-size:13px;opacity:.7}
+.read{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-height:1em}
+#num{font-family:Archivo,sans-serif;font-weight:800;font-stretch:105%;font-size:clamp(56px,6vw,84px);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+#unit{font-family:Archivo,sans-serif;font-weight:700;font-size:26px}
+#status{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:16px;color:var(--panel-ink)}
+#status::before{content:"";width:12px;height:12px;border-radius:50%;background:currentColor;opacity:.35}
+#meter[data-state="pass"] #status{color:var(--pass)}
+#meter[data-state="pass"] #status::before{opacity:1}
+#meter[data-state="fail"] #status{color:var(--fail)}
+#meter[data-state="fail"] #status::before{opacity:1}
+.gauge{position:relative;height:78px;margin:4px 8px 0}
+.gauge .bar{position:absolute;left:0;right:0;top:27px;height:14px;border-radius:7px;background:color-mix(in srgb,var(--panel-ink) 16%,transparent)}
+#zone{position:absolute;top:23px;height:22px;border-radius:5px;background:var(--pass)}
+#marker{position:absolute;top:7px;width:4px;height:54px;margin-left:-2px;border-radius:2px;background:var(--panel-ink);opacity:0}
+#marker::before{content:"";position:absolute;top:-5px;left:50%;width:12px;height:12px;background:inherit;transform:translateX(-50%) rotate(45deg)}
+#meter[data-state="fail"] #marker{background:var(--fail)}
+.tick{position:absolute;top:54px;transform:translateX(-50%);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+#rule{font-size:14px;opacity:.8}
+.slide{display:flex;flex-direction:column;gap:4px;font-size:13px;opacity:.9}
+.slide input{width:100%;accent-color:var(--panel-ink)}
+.slide input:disabled{opacity:.35}
+
+/* paperwork flow */
+#verdict{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;align-content:center;visibility:hidden;opacity:0}
+.vh{font-family:Archivo,sans-serif;font-weight:800;font-size:clamp(16px,1.8vw,22px);padding:0 4px}
+.vc{border-radius:16px;padding:14px 18px;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(16px,1.7vw,24px);line-height:1.2;color:#fff}
+.vc.pass{background:#0B8F4D}
+.vc.fail{background:#C81E24}
+.vc.merge{grid-column:1 / -1;background:transparent;color:inherit;border:3px solid currentColor}
+.conn{width:4px;height:20px;background:currentColor;margin:0 auto;transform-origin:top center}
+
+footer{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 28px}
+#cap{margin:0;flex:1 1 320px;max-width:62ch;min-height:3.6em;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(20px,2.2vw,30px);line-height:1.18}
+.w{display:inline-block;white-space:pre}
+#ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:2px solid currentColor;background:transparent;border-radius:999px;padding:9px 18px;min-height:44px;font-weight:700;font-size:16px}
+.btn:disabled{opacity:.35;cursor:default}
+.btn.go{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn[aria-pressed="true"]{box-shadow:inset 0 0 0 3px currentColor}
+#num.word{font-size:clamp(34px,3.8vw,50px)}
+#pick{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;font-weight:700}
+#pick button{border:2px solid var(--panel-ink);background:transparent;color:var(--panel-ink);border-radius:999px;padding:4px 12px;min-height:32px}
+#pick button[aria-pressed="true"]{background:var(--panel-ink);color:var(--panel)}
+#outcome{font-size:15px;font-weight:700;min-height:2.6em}
+
+#checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700}
+#checks li{display:flex;gap:10px;align-items:flex-start;opacity:.55}
+#checks .bx{flex:none;width:18px;height:18px;border:2px solid var(--panel-ink);border-radius:5px;margin-top:1px;position:relative}
+#checks li[data-s="now"]{opacity:1}
+#checks li[data-s="ok"]{opacity:1}
+#checks li[data-s="ok"] .bx{background:var(--pass);border-color:var(--pass)}
+#checks li[data-s="ok"] .bx::after{content:"";position:absolute;left:4px;top:0;width:5px;height:10px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+#checks li[data-s="bad"]{opacity:1;color:var(--fail)}
+#checks li[data-s="bad"] .bx{background:var(--fail);border-color:var(--fail)}
+#checks li[data-s="bad"] .bx::after{content:"\00D7";position:absolute;inset:-4px 0 0 0;text-align:center;color:#fff;font-size:17px;line-height:20px}
+.nog #num,.nog #unit,.nog #status,.nog .gauge,.nog #rule,.nog .slide,.nog .read{display:none}</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Cradlepoint modems</h1>
+    <div id="models" role="group" aria-label="Modem model"></div>
+  </header>
+  <nav id="rail" aria-label="Steps"><ol></ol></nav>
+  <main id="stage">
+    <div id="plateWrap">
+      <svg viewBox="0 0 800 340" role="img" aria-label="Cradlepoint modem inside a sign, with its cables, antennas, and the Netcloud and ThingSpace screens">
+        <defs><linearGradient id="ctlG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5A5FC4"/><stop offset="1" stop-color="#3C4090"/></linearGradient>
+<linearGradient id="mdmG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2d3037"/><stop offset="1" stop-color="#181a1f"/></linearGradient>
+<filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="3"/></filter>
+          <linearGradient id="fadeG" gradientUnits="userSpaceOnUse" x1="0" y1="330" x2="0" y2="340"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
+          <mask id="fadeM" maskUnits="userSpaceOnUse" x="-200" y="-200" width="1400" height="1000"><rect x="-200" y="-200" width="1400" height="1000" fill="url(#fadeG)"/></mask>
+          <filter id="blur" x="-10%" y="-200%" width="120%" height="500%"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+        
+<g id="path" opacity="0">
+  <g id="pnCtl"><rect x="26" y="110" width="130" height="80" rx="8" fill="url(#ctlG)" stroke="#1b1f5a" stroke-width="3"/><text class="ar" x="91" y="146" font-size="18" font-weight="800" fill="#fff" text-anchor="middle">1123</text><text class="ar" x="91" y="168" font-size="13" font-weight="700" fill="#E3E6FF" text-anchor="middle">controller</text><text class="ar" x="91" y="216" font-size="15" font-weight="800" fill="currentColor" text-anchor="middle">Sign</text></g>
+  <g id="pnMdm"><rect x="226" y="122" width="120" height="56" rx="16" fill="url(#mdmG)" stroke="#0b0c0e" stroke-width="3"/><circle cx="252" cy="150" r="5" fill="#35E27A"/><rect x="266" y="140" width="6" height="20" rx="3" fill="#35E27A"/><rect x="286" y="148" width="5" height="12" fill="#4A7BFF"/><rect x="296" y="144" width="5" height="16" fill="#4A7BFF"/><rect x="306" y="140" width="5" height="20" fill="#4A7BFF"/><rect x="316" y="136" width="5" height="24" fill="#4A7BFF"/><text class="ar" x="286" y="216" font-size="15" font-weight="800" fill="currentColor" text-anchor="middle">Cradlepoint modem</text></g>
+  <g id="pnTwr"><path d="M456 100 L480 190 L432 190 Z" fill="none" stroke="currentColor" stroke-width="5" stroke-linejoin="round"/><path d="M444 152 H468 M450 128 H462" stroke="currentColor" stroke-width="4"/><g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"><path d="M436 94 q-14 -12 0 -26"/><path d="M476 94 q14 -12 0 -26"/><path d="M424 100 q-26 -20 0 -44"/><path d="M488 100 q26 -20 0 -44"/></g><text class="ar" x="456" y="216" font-size="15" font-weight="800" fill="currentColor" text-anchor="middle">Verizon network</text></g>
+  <g id="pnCld"><path d="M610 170 q-30 0 -30 -26 q0 -24 26 -26 q8 -30 42 -26 q30 4 34 30 q28 2 28 24 q0 24 -28 24 Z" fill="#F4F5F8" stroke="#14161C" stroke-width="3"/><text class="ar" x="656" y="136" font-size="13" font-weight="800" fill="#14161C" text-anchor="middle">ThingSpace</text><text class="ar" x="656" y="156" font-size="13" font-weight="800" fill="#14161C" text-anchor="middle">Netcloud</text><text class="ar" x="660" y="216" font-size="15" font-weight="800" fill="currentColor" text-anchor="middle">The cloud</text></g>
+  <path class="fl" d="M160 150 H222" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 12"/>
+  <path class="fl" d="M350 150 H420" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 12"/>
+  <path class="fl" d="M494 150 H574" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 12"/>
+</g>
+
+<g id="bench" opacity="0">
+  <rect x="10" y="40" width="780" height="290" rx="12" fill="#000" opacity=".18"/>
+  <g id="cab"><rect x="270" y="100" width="250" height="150" rx="8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-dasharray="7 6"/>
+    <text class="ar" x="395" y="92" font-size="13" font-weight="800" fill="currentColor" text-anchor="middle">Module left of the controller</text></g>
+  <g id="ctl"><rect x="20" y="52" width="220" height="68" rx="6" fill="url(#ctlG)" stroke="#1b1f5a" stroke-width="2.5"/>
+    <text class="ar" x="130" y="42" font-size="14" font-weight="800" fill="currentColor" text-anchor="middle">1123 controller</text>
+    <g fill="#E3E6FF" font-size="9" font-weight="800" text-anchor="middle" class="ar"><text x="46" y="70">DC 5V-12V</text><text x="94" y="70">LAN</text><text x="138" y="70">AUDIO</text><text x="192" y="70">DISPLAY</text></g>
+    <circle cx="46" cy="88" r="9" fill="#0c0d0f" stroke="#c9ccd4" stroke-width="1.5"/><circle cx="46" cy="88" r="3" fill="#555"/>
+    <rect x="76" y="76" width="36" height="28" rx="2" fill="#0c0d0f" stroke="#c9ccd4" stroke-width="1.5"/><rect x="78" y="78" width="6" height="4" fill="#E8D43B"/><rect x="104" y="78" width="6" height="4" fill="#35E27A"/>
+    <circle cx="138" cy="90" r="8" fill="#0c0d0f" stroke="#c9ccd4" stroke-width="1.5"/>
+    <rect x="170" y="76" width="44" height="28" rx="2" fill="#0c0d0f" stroke="#c9ccd4" stroke-width="1.5"/><rect x="172" y="78" width="6" height="4" fill="#E8D43B"/><rect x="206" y="78" width="6" height="4" fill="#35E27A"/></g>
+  <g id="tape"><rect x="316" y="226" width="60" height="12" rx="2" fill="#E8DCC0" stroke="#8a7f5e" stroke-width="1.5"/><rect x="424" y="226" width="60" height="12" rx="2" fill="#E8DCC0" stroke="#8a7f5e" stroke-width="1.5"/>
+    <text class="ar" x="400" y="272" font-size="13" font-weight="800" fill="currentColor" text-anchor="middle">3M VHB tape or a screw</text></g>
+  <text id="mdmLbl" class="ar" x="276" y="244" font-size="15" font-weight="800" fill="currentColor" text-anchor="start">IBR200</text>
+  <g id="modem"></g>
+  <g id="dataIn"><rect x="610" y="56" width="170" height="122" rx="8" fill="#101114" stroke="#C9CDD4" stroke-width="2.5"/>
+    <g id="sma0"><circle cx="650" cy="92" r="11" fill="#C9A227" stroke="#6b5a24" stroke-width="2"/><circle cx="650" cy="92" r="4" fill="#3a3320"/></g>
+    <g id="sma1"><circle cx="740" cy="92" r="11" fill="#C9A227" stroke="#6b5a24" stroke-width="2"/><circle cx="740" cy="92" r="4" fill="#3a3320"/></g>
+    <rect x="630" y="132" width="130" height="36" rx="10" fill="#101114" stroke="#fff" stroke-width="3"/><text class="ar" x="695" y="158" font-size="22" font-weight="900" fill="#fff" text-anchor="middle">DATA IN</text></g>
+  <g id="ants" opacity="0"><g stroke="#14161C" stroke-linecap="round"><path d="M650 80 V8" stroke-width="9"/><path d="M740 80 V8" stroke-width="9"/></g><g stroke="#E9ECF3" stroke-linecap="round"><path d="M650 80 V8" stroke-width="5"/><path d="M740 80 V8" stroke-width="5"/></g>
+    <text class="ar" x="694" y="30" font-size="12" font-weight="800" fill="currentColor" text-anchor="middle">Antennas, high and in the open</text></g>
+  <g id="cabExt" opacity="0"><path class="cp" id="eA0" d="" fill="none" stroke="#6b7078" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><path class="cp" id="eA1" d="" fill="none" stroke="#15161a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path class="cp" id="eB0" d="" fill="none" stroke="#6b7078" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><path class="cp" id="eB1" d="" fill="none" stroke="#15161a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g id="cabLan" opacity="0"><path class="cp" id="lan0" d="" fill="none" stroke="#6b7078" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/><path class="cp" id="lan1" d="" fill="none" stroke="#9AD0FF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g id="power" opacity="0"><rect x="560" y="290" width="226" height="34" rx="6" fill="#16181c" stroke="#7a7f88" stroke-width="2"/>
+    <g fill="#E9E4D4" stroke="#8a867a"><rect x="580" y="298" width="28" height="18" rx="3"/><rect x="630" y="298" width="28" height="18" rx="3"/><rect x="686" y="298" width="28" height="18" rx="3"/><rect x="736" y="298" width="28" height="18" rx="3"/></g>
+    <text class="ar" x="566" y="284" font-size="12" font-weight="800" fill="currentColor">Power strip</text>
+    <rect x="590" y="234" width="60" height="36" rx="5" fill="#15161a" stroke="#C9CDD4" stroke-width="2"/><text class="ar" x="620" y="256" font-size="9" font-weight="800" fill="#fff" text-anchor="middle">AC adapter</text>
+    <g id="cabPwr"><path class="cp" id="pw0" d="" fill="none" stroke="#6b7078" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><path class="cp" id="pw1" d="" fill="none" stroke="#15161a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path class="cp" d="M650 252 H700 V292" fill="none" stroke="#6b7078" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/><path class="cp" d="M650 252 H700 V292" fill="none" stroke="#15161a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></g></g>
+</g>
+
+<g id="win" opacity="0"></g>
+<g id="flow" opacity="0"></g>
+<g id="rings" opacity="0"><rect id="ringO" x="0" y="0" width="10" height="10" rx="8" fill="none" stroke="#fff" stroke-width="8"/><rect id="ringI" x="0" y="0" width="10" height="10" rx="8" fill="none" stroke="#14161C" stroke-width="3.5"/></g>
+
+        <g mask="url(#fadeM)">
+        <g id="probeB" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#15161a" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#15161a" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        <g id="probeR" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#E02B2B" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#E02B2B" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        </g>
+        <text id="tag" class="ar" x="20" y="334" font-size="20" font-weight="800" fill="currentColor" text-anchor="start" opacity="0"></text>
+        <g id="live" opacity="0">
+          <rect x="18" y="14" width="190" height="36" rx="18" fill="#14130C"/>
+          <circle id="liveDot" cx="40" cy="32" r="7" fill="#FFC800"/>
+          <text id="liveTxt" x="56" y="38" fill="#FFC800" font-size="17" font-weight="700">Mains power</text>
+        </g>
+      </svg>
+    </div>
+    <aside id="meter" data-state="idle" aria-label="Bench readout">
+      <div class="mode"><span class="pill" id="pill">Modem check</span><span class="note">Example readings</span></div>
+      <div class="read"><span id="num">---</span><span id="unit"></span></div>
+      <div id="status" aria-live="polite">Not measuring</div>
+      <div class="gauge" id="gauge" aria-hidden="true">
+        <div class="bar"></div><div id="zone"></div><div id="marker"></div>
+        <span class="tick" id="tickLo"></span><span class="tick" id="tickHi"></span>
+      </div>
+      <div id="rule"></div>
+      <label class="slide">Drag to try other RSRP readings
+        <input id="slider" type="range" min="0" max="1" step="0.01" value="0" disabled>
+      </label>
+      <ul id="checks" style="opacity:0;visibility:hidden"></ul>
+      <div id="pick" style="opacity:0;visibility:hidden"></div>
+      <div id="outcome" aria-live="polite"></div>
+    </aside>
+    <div id="verdict"></div>
+  </main>
+  <footer>
+    <p id="cap" aria-live="polite"></p>
+    <div id="ctl">
+      <button class="btn" id="bBack">Back</button>
+      <button class="btn" id="bReplay">Replay step</button>
+      <button class="btn" id="bAuto" aria-pressed="false">Auto-play</button>
+      <button class="btn go" id="bNext">Next</button>
+    </div>
+  </footer>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+const NS='http://www.w3.org/2000/svg';
+const mk=(tag,attrs,parent)=>{const e=document.createElementNS(NS,tag);Object.keys(attrs||{}).forEach(k=>e.setAttribute(k,attrs[k]));if(parent)parent.appendChild(e);return e;};
+const root=document.documentElement;
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const THEMES={blue:{bg:'#2336D8',fg:'#F4F6FF'},yellow:{bg:'#FFC800',fg:'#14130C'},paper:{bg:'#E9ECF3',fg:'#14161C'}};
+let theme={...THEMES.blue};
+const hex=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+const toHex=s=>s.startsWith('#')?s:'#'+s.match(/\d+/g).map(v=>(+v).toString(16).padStart(2,'0')).join('');
+const mix=(a,b,t)=>{const x=hex(toHex(a)),y=hex(toHex(b));return 'rgb('+x.map((v,i)=>Math.round(v+(y[i]-v)*t)).join(',')+')';};
+function applyTheme(){root.style.setProperty('--bg',theme.bg);root.style.setProperty('--fg',theme.fg);}
+function themeTween(t,key,pos){
+  const from={...theme}, to=THEMES[key], p={t:0};
+  t.to(p,{t:1,duration:reduce?0.01:0.7,ease:'power2.inOut',onUpdate(){
+    theme={bg:mix(from.bg,to.bg,p.t),fg:mix(from.fg,to.fg,p.t)}; applyTheme();
+  },onComplete(){theme={...to};applyTheme();}},pos);
+}
+applyTheme();
+
+/* ---------- meter / gauge ---------- */
+const meter=$('#meter'),num=$('#num'),unitEl=$('#unit'),statusEl=$('#status'),zone=$('#zone'),marker=$('#marker'),
+      tickLo=$('#tickLo'),tickHi=$('#tickHi'),rule=$('#rule'),slider=$('#slider');
+const G={lo:0,hi:1,min:0,max:1,dec:1,unit:'V DC'}; const R={v:null}; const P={val:0};
+const pct=v=>Math.max(0,Math.min(100,(v-G.min)/(G.max-G.min)*100));
+const fmt=(v,d)=>v.toFixed(d);
+function configureGauge(lo,hi,dec,tdec,unit){
+  const span=hi-lo;
+  Object.assign(G,{lo,hi,min:lo-span*0.9,max:hi+span*0.9,dec,unit});
+  zone.style.left=pct(lo)+'%'; zone.style.width=(pct(hi)-pct(lo))+'%';
+  tickLo.style.left=pct(lo)+'%'; tickHi.style.left=pct(hi)+'%';
+  tickLo.textContent=fmt(lo,tdec); tickHi.textContent=fmt(hi,tdec);
+  rule.textContent='Pass: '+fmt(lo,tdec)+' to '+fmt(hi,tdec)+' '+unit;
+  slider.min=G.min; slider.max=G.max; slider.step=(G.max-G.min)/300;
+}
+function render(v){
+  R.v=v;
+  if(v==null){num.textContent='---';unitEl.textContent='';meter.dataset.state='idle';statusEl.textContent='Not measuring';marker.style.opacity=0;return;}
+  marker.style.opacity=1; marker.style.left=pct(v)+'%';
+  num.textContent=fmt(v,G.dec); unitEl.textContent=G.unit;
+  const ok=v>=G.lo-1e-9&&v<=G.hi+1e-9;
+  meter.dataset.state=ok?'pass':'fail';
+  statusEl.textContent=ok?'In range':(v<G.lo?'Too low':'Too high');
+  slider.value=v;
+}
+slider.addEventListener('input',()=>{gsap.killTweensOf(P); render(+slider.value); if(typeof MOD!=='undefined'&&MOD.onSlide)MOD.onSlide(+slider.value);});
+
+/* ---------- shared helpers ---------- */
+const setTag=text=>{const e=$('#tag');if(!e)return;e.textContent=text;gsap.fromTo(e,{autoAlpha:0,y:8},{autoAlpha:1,y:0,duration:.35});};
+const drawIn=(t,sel,at,d)=>t.to(sel,{strokeDashoffset:0,duration:d||.6,ease:'power3.out'},at);
+function prepDash(sel,drawn){ $$(sel).forEach(p=>{const L=Math.ceil(p.getTotalLength())+2;p.dataset.len=L;p.style.strokeDasharray=L;p.style.strokeDashoffset=drawn?0:L;}); }
+/* checklist in the panel */
+function setChecks(items){
+  const ul=$('#checks'); ul.innerHTML='';
+  (items||[]).forEach((txt,i)=>{const li=document.createElement('li');li.dataset.s='off';li.innerHTML='<span class="bx"></span><span>'+txt+'</span>';ul.appendChild(li);});
+  gsap.set('#checks',{autoAlpha:(items&&items.length)?1:0});
+}
+function check(i,state){ const li=$$('#checks li')[i]; if(li)li.dataset.s=state; }
+function allChecks(state){ $$('#checks li').forEach(li=>li.dataset.s=state); }
+/* option buttons in the panel */
+let pickCb=null;
+function setPick(label,opts,cur,cb){
+  const box=$('#pick'); pickCb=cb;
+  if(!opts){box.innerHTML='';gsap.set(box,{autoAlpha:0});return;}
+  box.innerHTML='<span>'+label+'</span>';
+  opts.forEach(o=>{const b=document.createElement('button');b.textContent=o[1];b.dataset.k=o[0];b.setAttribute('aria-pressed',o[0]===cur);
+    b.onclick=()=>{$$('#pick button').forEach(x=>x.setAttribute('aria-pressed',x===b));pickCb&&pickCb(o[0]);};box.appendChild(b);});
+}
+/* probes: two leads, black and red, tip at local 0,0 */
+const probeB=$('#probeB'),probeR=$('#probeR');
+if(probeB){gsap.set([probeB,probeR],{transformOrigin:'0px 0px'});}
+const PD=150;
+const axisV=th=>[-Math.sin(th*Math.PI/180),Math.cos(th*Math.PI/180)];
+function probeAt(el,p){gsap.set(el,{x:p[0],y:p[1],rotation:p[2],autoAlpha:1});}
+function probePark(el,p){const a=axisV(p[2]);gsap.set(el,{x:p[0]+a[0]*PD,y:p[1]+a[1]*PD,rotation:p[2],autoAlpha:0});}
+function probeIn(t,el,p,at,d){t.to(el,{x:p[0],y:p[1],rotation:p[2],autoAlpha:1,duration:d||1.1,ease:'power3.out'},at);}
+function probeOut(t,el,p,at){const a=axisV(p[2]);t.to(el,{x:p[0]+a[0]*PD,y:p[1]+a[1]*PD,autoAlpha:0,duration:.6,ease:'power2.in'},at);}
+const pulse=(sels,atTime,t)=>t.fromTo(sels,{scale:1},{scale:1.45,yoyo:true,repeat:1,duration:.17,transformOrigin:'50% 50%',ease:'power2.out'},atTime);
+
+const paperScene=t=>{
+  t.to(['#plateWrap','#meter'],{autoAlpha:0,y:-24,duration:.5,ease:'power2.in'},0);
+  t.set('#verdict',{autoAlpha:1},.5);
+  [0,1,2,3].forEach(r=>{
+    t.fromTo('#verdict [data-row="'+r+'"]',{y:24,autoAlpha:0},{y:0,autoAlpha:1,duration:.5,stagger:.12,ease:'power3.out'},.6+r*.75);
+    if(r<3) t.fromTo('#verdict [data-row="c'+r+'"]',{scaleY:0},{scaleY:1,duration:.3,ease:'none'},.6+r*.75+.45);
+  });
+};
+
+
+const ORDER=['intro','mount','cable','power','ants','lights','find','plan','signal','fix','trouble'];
+const TITLES={intro:'The connection',mount:'Mount the modem',cable:'Cable it',power:'Power it',ants:'Antennas',lights:'Read the lights',find:'Find the number',plan:'Check ThingSpace',signal:'Signal quality',fix:'Group or direct',trouble:'Pick the symptom'};
+const THEME_OF={intro:'blue',mount:'blue',cable:'blue',power:'yellow',ants:'blue',lights:'blue',find:'blue',plan:'paper',signal:'blue',fix:'paper',trouble:'paper'};
+const MODELS={
+  ib:{key:'ib',name:'IBR200',gen:'3 status lights · 4 signal bars',W:320,H:116},
+  s4:{key:'s4',name:'S400',gen:'one status light · unit swap'}
+};
+MODELS.s4.W=320;MODELS.s4.H=100;
+const CAP={
+  intro:m=>'The sign’s controller reaches the cloud through the Cradlepoint modem, Verizon and then Netcloud. When a sign drops off, work from the modem outward: lights, plan, signal.',
+  mount:m=>'Open the module to the left of the controller. Fix the modem down with strong double-sided tape (3M VHB) or a screw.'+(m.key==='s4'?' The S400 is a unit swap: same spot, same hookups.':''),
+  cable:m=>'Connect the extension cables to the modem, and run them to the DATA IN connectors. Then connect the modem’s LAN port to the sign’s controller.',
+  power:m=>'Connect the power cable to the modem, then plug the adapter into the power strip. That is mains power, so check the strip before you plug in.',
+  ants:m=>'Plug the antennas into the back of the sign, at the connectors marked DATA IN. For the final install, mount them as high as possible, never between or inside sign cabinets.',
+  lights:m=>m.key==='ib'?'Most problems show on the modem light. Pick a light to see what it means. Blinking red with all four signal bars blinking together, at the same rate, means an open SIM.':'The S400 has one status light. Pick a colour to see what it means and what to do.',
+  find:m=>'To look the modem up at Verizon you need its phone number. In Netcloud open the device, then Connection Status, then the Internal modem, and read the MDN.',
+  plan:m=>'Look the number up in ThingSpace. The device should be Active, and every sign should be on Private Static. Pick what you see to find the fix.',
+  signal:m=>'Open the device’s Health tab in Netcloud and read RSRP. Our line is −95 dBm: stronger is fine, weaker is a problem, and −115 is very weak. Drag to try readings.',
+  fix:m=>'Settings problems are fixed in one of two places. Move the device to the right group in Netcloud, or plug a laptop into the modem and log in to it directly.',
+  trouble:m=>'Pick what you are seeing and follow the checks from top to bottom.'
+};
+const S={light:{ib:'ok',s4:'ws'},ts:'active',fix:'group',tr:'light',rsrp:-112};
+const COL={g:'#35E27A',y:'#FFC800',r:'#FF4B4B',b:'#4A7BFF',w:'#F4F6FF',c:'#2FD3E0',off:'#4a4f58'};
+const LIGHTS={
+ ib:[
+  ['ok','Solid green',{p:1,m:['g',0],s:[4,0]},'Solid green modem light and 4 solid signal bars: an active connection, strongest signal.','Good. Nothing to fix.'],
+  ['conn','Blinking green',{p:1,m:['g',1]},'Blinking green: the modem is connecting.','Give it a minute. Still blinking? Check provisioning and signal quality.'],
+  ['weak','1 blinking bar',{p:1,m:['g',0],s:[1,1]},'One blinking bar: the weakest signal.','Check the antennas are clear of cabinets and the connectors are tight.'],
+  ['yelS','Solid yellow',{p:1,m:['y',0]},'Solid yellow: the modem is not active.','Power cycle: unplug the adapter from the strip, wait one minute, plug back in. Still yellow? Check provisioning or signal.'],
+  ['yelB','Blinking yellow',{p:1,m:['y',1]},'Blinking yellow: data connection error, no modem connection possible.','Power cycle: unplug the adapter from the strip, wait one minute, plug back in. Still yellow? Check provisioning or signal.'],
+  ['redB','Blinking red',{p:1,m:['r',1]},'Blinking red on its own: the modem is resetting.','Wait for the reset to finish, then read the light again.'],
+  ['sim','Red + bars blink',{p:1,m:['r',1],s:[4,1]},'Blinking red with all four signal bars blinking together at the same rate: the SIM is open (door open or SIM not seated).','Close the SIM door and seat the SIM, then read the light again.'],
+  ['off','No light',{p:0},'No light: the modem is not getting power.','Check the power switch and the power connection, then the strip.']
+ ],
+ s4:[
+  ['off','No light',{c:null},'No light: powered off.','Check the adapter and the power strip.'],
+  ['wb','Blinking white',{c:['w',1]},'Blinking white: the WAN is online but the modem is not connected to Netcloud.','Check the device’s provisioning in ThingSpace and its group in Netcloud.'],
+  ['ws','Solid white',{c:['w',0]},'Solid white: connected to Netcloud.','Good. Nothing to fix.'],
+  ['gb','Blinking green',{c:['g',1]},'Blinking green: the modem is connecting.','Give it a minute. Still blinking? Check provisioning and signal quality.'],
+  ['yb','Blinking yellow',{c:['y',1]},'Blinking yellow: the modem is resetting.','Wait for the reset to finish, then read the light again.'],
+  ['rs','Solid red',{c:['r',0]},'Solid red: offline.','Power cycle: unplug the adapter from the strip, wait one minute, plug back in. Still red? Check provisioning or signal.'],
+  ['rb','Blinking red',{c:['r',1]},'Blinking red: data connection error, no modem connection possible.','Power cycle first. Then check the SIM tray and door, provisioning, and signal.'],
+  ['cb','Blinking cyan',{c:['c',1]},'Blinking cyan: factory reset.','Wait for it to finish. It will need to be put back in its group.'],
+  ['hr','Health: poor',{c:['r',1]},'Cellular Health Mode, flashing red: cellular health below 25%.','Press and hold the reset button 2 to 3 seconds to enter this mode; it lasts 20 seconds.'],
+  ['hy','Health: fair',{c:['y',1]},'Cellular Health Mode, flashing yellow: cellular health 25 to 49%.','Fair. Look at antennas and signal quality.'],
+  ['hb','Health: good',{c:['b',0]},'Cellular Health Mode, solid blue: cellular health 50 to 74%.','Good.'],
+  ['hg','Health: excellent',{c:['g',0]},'Cellular Health Mode, solid green: cellular health 75 to 100%.','Excellent.']
+ ]
+};
+const GEO={ib:{lan:[246,86],pwr:[289,82],ant:[100,140]},s4:{lan:[68,66],pwr:[141,58],ant:[100,220]}};
+const MX=300,MY=150,MS=.62;
+const wp=p=>[MX+p[0]*MS,MY+p[1]*MS];
+const RC=(p,x,y,w,h,o)=>mk('rect',Object.assign({x,y,width:w,height:h},o||{}),p);
+const Tx=(p,x,y,s,o)=>{const e=mk('text',Object.assign({x,y},o||{}),p);e.textContent=s;return e;};
+const INK='#14161C';
+const modemG=$('#modem');
+function buildModem(){
+  const m=MOD.model; modemG.innerHTML=''; const g=modemG;
+  if(m.key==='ib'){
+    mk('rect',{x:0,y:0,width:320,height:116,rx:26,fill:'url(#mdmG)',stroke:'#0b0c0e','stroke-width':3},g);
+    for(let i=0;i<7;i++)  RC(g,60+i*26,0,14,7,{fill:'#0f1013'});
+    mk('circle',{cx:24,cy:58,r:12,fill:'#2b2f36',stroke:'#6b7078','stroke-width':2},g); Tx(g,24,88,'2.4GHz',{'font-size':9,fill:'#cfd3da','text-anchor':'middle','font-weight':700});
+    /* icons */
+    mk('circle',{cx:62,cy:44,r:5.5,fill:'none',stroke:'#E9ECF3','stroke-width':1.8},g); mk('path',{d:'M62 37v6',stroke:'#E9ECF3','stroke-width':1.8},g);
+    mk('path',{d:'M54 42 q8 -9 16 0 M57 45 q5 -5 10 0',fill:'none',stroke:'#E9ECF3','stroke-width':1.6,transform:'translate(26,0)'},g); mk('circle',{cx:88,cy:48,r:1.4,fill:'#E9ECF3'},g);
+    mk('path',{d:'M108 38 l6 8 l6 -8 M114 46 v8',fill:'none',stroke:'#E9ECF3','stroke-width':1.8},g);
+    for(let i=0;i<3;i++)  RC(g,59+i*26,56,6,22,{id:'iled'+i,rx:3,fill:COL.off});
+    [10,16,22,28].forEach((h,i)=> RC(g,141+i*12,78-h,7,h,{id:'isig'+i,rx:1.5,fill:COL.off}));
+     RC(g,196,44,18,40,{fill:'#0a0a0b',stroke:'#888','stroke-width':1.5,rx:2});
+     RC(g,224,48,44,38,{fill:'#0a0a0b',stroke:'#9aa0a6','stroke-width':2,rx:3});
+    for(let k=0;k<6;k++)  RC(g,230+k*5.6,70,2.4,10,{fill:'#C9A227'});
+    Tx(g,246,102,'LAN',{'font-size':11,fill:'#cfd3da','text-anchor':'middle','font-weight':800,class:'ar'});
+     RC(g,278,52,22,30,{fill:'#E9E9EC',stroke:'#777','stroke-width':1.5,rx:3}); [[282,56],[291,56],[282,67],[291,67]].forEach(q=> RC(g,q[0],q[1],7,9,{fill:'#333'}));
+  } else {
+    mk('rect',{x:0,y:0,width:320,height:100,rx:10,fill:'url(#mdmG)',stroke:'#0b0c0e','stroke-width':3},g);
+     RC(g,10,34,10,32,{rx:5,fill:'#0c0d0f',stroke:'#555'});  RC(g,300,34,10,32,{rx:5,fill:'#0c0d0f',stroke:'#555'});
+     RC(g,40,22,56,44,{fill:'#0a0a0b',stroke:'#9aa0a6','stroke-width':2,rx:3}); for(let k=0;k<8;k++)  RC(g,47+k*5.4,50,2.4,10,{fill:'#C9A227'});
+    Tx(g,68,16,'0 PoE',{'font-size':10,fill:'#cfd3da','text-anchor':'middle','font-weight':800,class:'ar'});
+     RC(g,106,22,20,44,{fill:'#0a0a0b',stroke:'#888','stroke-width':1.5,rx:2});
+     RC(g,131,26,22,32,{fill:'#E9E9EC',stroke:'#777','stroke-width':1.5,rx:3}); [[135,30],[144,30],[135,41],[144,41]].forEach(q=> RC(g,q[0],q[1],7,9,{fill:'#333'}));
+    mk('circle',{cx:176,cy:44,r:6,fill:'#14161a',stroke:'#8b919b','stroke-width':1.5},g);
+    mk('path',{d:'M196 26 h50 a12 12 0 0 1 12 12 v34 h-62 z',id:'sled',fill:COL.off,stroke:'#8b919b','stroke-width':2},g);
+    mk('circle',{cx:228,cy:52,r:12,fill:'none',stroke:'#14161C','stroke-width':2.5,opacity:.7},g); mk('path',{d:'M222 52 l5 5 l9 -10',fill:'none',stroke:'#14161C','stroke-width':2.5,opacity:.7},g);
+  }
+}
+function buildBench(){
+  const m=MOD.model, G=GEO[m.key];
+  $('#mdmLbl').textContent=m.name;
+  const L=wp(G.lan), P=wp(G.pwr), a=wp([G.ant[0],0]), b=wp([G.ant[1],0]);
+  const dLan='M'+L[0]+' '+L[1]+' V232 H94 V106';
+  const dPw='M'+P[0]+' '+P[1]+' V252 H590';
+  const dA='M'+a[0]+' '+a[1]+' V118 H650 V100';
+  const dB='M'+b[0]+' '+b[1]+' V132 H740 V100';
+  ['lan0','lan1'].forEach(i=>$('#'+i).setAttribute('d',dLan)); ['pw0','pw1'].forEach(i=>$('#'+i).setAttribute('d',dPw));
+  ['eA0','eA1'].forEach(i=>$('#'+i).setAttribute('d',dA)); ['eB0','eB1'].forEach(i=>$('#'+i).setAttribute('d',dB));
+}
+function applyLed(st){
+  const m=MOD.model;
+  gsap.killTweensOf('#iled0,#iled1,#iled2,#isig0,#isig1,#isig2,#isig3,#sled,#mdmGlow');
+  if(m.key==='ib'){
+    ['#iled0','#iled1','#iled2','#isig0','#isig1','#isig2','#isig3'].forEach(s=>gsap.set(s,{fill:COL.off,opacity:1}));
+    if(st.p) gsap.set('#iled0',{fill:COL.g});
+    const blink=[];
+    if(st.m){gsap.set('#iled2',{fill:COL[st.m[0]]}); if(st.m[1])blink.push('#iled2');}
+    if(st.s){for(let i=0;i<st.s[0];i++){gsap.set('#isig'+i,{fill:COL.b}); if(st.s[1]){ if(st.s[0]===1||true) blink.push('#isig'+i);} }}
+    if(blink.length&&!reduce) gsap.fromTo(blink,{opacity:1},{opacity:.12,duration:.45,yoyo:true,repeat:-1,ease:'none'});
+  } else {
+    gsap.set('#sled',{fill:COL.off,opacity:1});
+    if(st.c){gsap.set('#sled',{fill:COL[st.c[0]]}); if(st.c[1]&&!reduce) gsap.fromTo('#sled',{opacity:1},{opacity:.12,duration:.45,yoyo:true,repeat:-1,ease:'none'});}
+  }
+}
+const lightList=()=>LIGHTS[MOD.model.key];
+function lightInfo(k){return lightList().find(l=>l[0]===k)||lightList()[0];}
+function showLight(k){const l=lightInfo(k);applyLed(l[2]);$('#outcome').textContent=l[3]+' '+l[4];setTag(l[1]);}
+function ring(t,x,y,w,h,at){
+  const o=(x+w/2)+' '+(y+h/2);
+  t.call(()=>{['#ringO','#ringI'].forEach(s=>{const e=$(s);e.setAttribute('x',x);e.setAttribute('y',y);e.setAttribute('width',w);e.setAttribute('height',h);});},null,at);
+  t.fromTo('#rings',{autoAlpha:0,scale:1,svgOrigin:o},{autoAlpha:1,scale:1,svgOrigin:o,duration:.35,ease:'back.out(2)'},at+.02);
+  if(!reduce) t.fromTo('#rings',{scale:1,svgOrigin:o},{scale:1.08,svgOrigin:o,duration:.22,yoyo:true,repeat:5,ease:'sine.inOut'},at+.45);
+}
+const dashFlow=reduce?null:gsap.to({o:0},{o:-28,duration:1.1,repeat:-1,ease:'none',onUpdate(){const o=this.targets()[0].o;$$('.fl').forEach(p=>p.style.strokeDashoffset=o);}});
+/* ---- web window mock-ups ---- */
+const winG=$('#win'), flowG=$('#flow');
+function frame(title){
+  winG.innerHTML='';
+   RC(winG,100,20,600,286,{rx:10,fill:'#F4F5F8',stroke:INK,'stroke-width':3});
+   RC(winG,100,20,600,34,{rx:10,fill:INK});  RC(winG,100,40,600,14,{fill:INK});
+  Tx(winG,118,49,title,{class:'ar','font-size':15,'font-weight':800,fill:'#F4F5F8'});
+}
+const fadeS=sel=>gsap.set(sel,{autoAlpha:0});
+function buildNetcloud(){
+  frame('Netcloud Manager');
+  const s1=mk('g',{id:'nc1'},winG), s2=mk('g',{id:'nc2'},winG), s3=mk('g',{id:'nc3'},winG);
+  /* screen 1: devices */
+   RC(s1,116,72,568,28,{fill:'#DDE0E7'}); ['Name','Product','Group'].forEach((h,i)=>Tx(s1,150+i*170,91,h,{class:'ar','font-size':13,'font-weight':800,fill:INK}));
+  Tx(s1,116,64+0,'',{});
+   RC(s1,108,66,62,0,{});
+  Tx(s1,130,126,'Devices',{class:'ar','font-size':16,'font-weight':800,fill:'#2336D8',id:'ncDev'});
+  mk('circle',{cx:128,cy:164,r:7,fill:'#0B8F4D'},s1); Tx(s1,150,170,'Example sign 0001',{class:'ar','font-size':16,'font-weight':800,fill:INK,id:'ncRow'});
+  Tx(s1,320,170,MOD.model.name,{'font-size':15,fill:INK}); Tx(s1,490,170,'Example group',{'font-size':15,fill:INK});
+   RC(s1,116,148,568,32,{fill:'none',stroke:'#2336D8','stroke-width':2,rx:4,opacity:.4});
+  /* screen 2: device page */
+  Tx(s2,120,92,'Example sign 0001',{class:'ar','font-size':20,'font-weight':800,fill:INK});
+  ['Home','Configuration','Data Usage','Health'].forEach((h,i)=>Tx(s2,120+i*110,120,h,{'font-size':14,fill:INK,'font-weight':i?400:700}));
+   RC(s2,120,136,260,150,{rx:6,fill:'#fff',stroke:'#C4C8D0','stroke-width':2});
+  Tx(s2,134,160,'Connection Status',{class:'ar','font-size':14,'font-weight':800,fill:INK});
+  Tx(s2,250,210,'Internal modem',{class:'ar','font-size':20,'font-weight':800,fill:INK,'text-anchor':'middle'});
+  Tx(s2,250,256,'LTE',{'font-size':15,fill:INK,'text-anchor':'middle'});
+   RC(s2,410,136,274,150,{rx:6,fill:'#fff',stroke:'#C4C8D0','stroke-width':2}); Tx(s2,424,160,'Usage by WAN',{class:'ar','font-size':14,'font-weight':800,fill:INK});
+  /* screen 3: modem details */
+   RC(s3,120,76,300,200,{rx:6,fill:'#fff',stroke:'#C4C8D0','stroke-width':2});
+  Tx(s3,134,100,'Internal modem (Verizon)',{class:'ar','font-size':15,'font-weight':800,fill:INK});
+  [['Carrier','Verizon'],['State','Disconnected'],['APN','example.apn'],['Band','4']].forEach((r,i)=>{Tx(s3,134,134+i*28,r[0],{'font-size':14,fill:'#555'});Tx(s3,230,134+i*28,r[1],{'font-size':14,fill:INK,'font-weight':700});});
+   RC(s3,440,76,244,200,{rx:6,fill:'#F7F8FA',stroke:'#C4C8D0','stroke-width':2});
+  Tx(s3,454,100,'Modem Identifier',{class:'ar','font-size':15,'font-weight':800,fill:INK});
+  Tx(s3,454,136,'MDN',{'font-size':14,fill:'#555',id:'ncMdnL'}); Tx(s3,500,136,'+1 555 010 0199',{'font-size':15,fill:INK,'font-weight':700,id:'ncMdn'});
+  Tx(s3,454,166,'Serial number',{'font-size':14,fill:'#555'}); Tx(s3,454,190,'hidden in this example',{'font-size':13,fill:'#777'});
+  Tx(s3,454,236,'MDN = the modem’s phone number',{'font-size':12,fill:'#555'});
+}
+function buildThing(){
+  frame('Verizon ThingSpace');
+  Tx(winG,120,92,'Devices',{class:'ar','font-size':18,'font-weight':800,fill:INK});
+   RC(winG,116,104,568,28,{fill:'#DDE0E7'}); ['Number','State','Plan'].forEach((h,i)=>Tx(winG,134+i*170,123,h,{class:'ar','font-size':13,'font-weight':800,fill:INK}));
+  Tx(winG,134,160,'+1 555 010 0199',{'font-size':16,fill:INK,'font-weight':700});
+   RC(winG,300,142,120,26,{rx:13,id:'tsBadge',fill:'#0B8F4D'}); Tx(winG,360,160,'Active',{class:'ar','font-size':14,'font-weight':800,fill:'#fff','text-anchor':'middle',id:'tsBadgeT'});
+  Tx(winG,470,160,'Private Static',{'font-size':15,fill:INK,'font-weight':700,id:'tsPlan'});
+   RC(winG,590,142,84,26,{rx:6,fill:'#fff',stroke:INK,'stroke-width':2,id:'tsAct'}); Tx(winG,632,160,'Action',{class:'ar','font-size':14,'font-weight':800,fill:INK,'text-anchor':'middle'});
+  Tx(winG,134,206,'Netcloud shows:',{'font-size':14,fill:'#555'}); Tx(winG,254,206,'online',{class:'ar','font-size':14,'font-weight':800,fill:'#0B8F4D',id:'tsNc'});
+  const menu=mk('g',{id:'tsMenu',opacity:0},winG);
+   RC(menu,520,172,154,126,{rx:6,fill:'#fff',stroke:INK,'stroke-width':2});
+  [['Change service plan',0],['Suspend',1],['Resume',2],['Deactivate',3]].forEach(a=>{ RC(menu,524,176+a[1]*30,146,26,{rx:4,fill:'none',id:'mi'+a[1]});Tx(menu,534,194+a[1]*30,a[0],{'font-size':14,fill:INK,'font-weight':700});});
+  const pl=mk('g',{id:'tsPool',opacity:0},winG);
+   RC(pl,300,236,280,60,{rx:6,fill:'#fff',stroke:INK,'stroke-width':2}); Tx(pl,314,258,'Pool group',{class:'ar','font-size':13,'font-weight':800,fill:INK});  RC(pl,314,266,252,22,{rx:4,fill:'#F4F5F8',stroke:'#888'}); Tx(pl,324,282,'Pick the right pool',{'font-size':13,fill:INK});
+}
+function buildHealth(){
+  frame('Netcloud Health: RSRP');
+  const x0=150,x1=680,y0=84,y1=292, f=v=>y0+(-60-v)/65*(y1-y0);
+   RC(winG,x0,y0,x1-x0,y1-y0,{fill:'#fff',stroke:'#C4C8D0','stroke-width':2});
+   RC(winG,x0,f(-95),x1-x0,f(-125)-f(-95),{fill:'#C81E24',opacity:.1});
+  [[-95,'−95 dBm: strong'],[-115,'−115 dBm: very weak']].forEach(l=>{mk('line',{x1:x0,x2:x1,y1:f(l[0]),y2:f(l[0]),stroke:l[0]===-95?'#0B8F4D':'#C81E24','stroke-width':2.5,'stroke-dasharray':'8 6'},winG);Tx(winG,x1-6,f(l[0])-6,l[1],{class:'ar','font-size':13,'font-weight':800,fill:l[0]===-95?'#0B8F4D':'#C81E24','text-anchor':'end'});});
+  let d='',s=7;for(let i=0;i<=40;i++){s=(s*9301+49297)%233280;const v=-112+((s/233280)-.5)*9+Math.sin(i/3)*2;d+=(i?'L':'M')+(x0+i*(x1-x0)/40)+' '+f(v);}
+  mk('path',{d,fill:'none',stroke:'#2F9DB8','stroke-width':2.5,id:'hpath'},winG);
+  Tx(winG,x0-6,f(-95)+4,'−95',{'font-size':12,fill:INK,'text-anchor':'end'}); Tx(winG,x0-6,f(-115)+4,'−115',{'font-size':12,fill:INK,'text-anchor':'end'});
+  Tx(winG,x0,y1+16,'Last 7 days (example)',{'font-size':12,fill:'#555'});
+}
+function buildFix(){
+  frame(S.fix==='group'?'Netcloud: move to group':'Direct connection');
+  if(S.fix==='group'){
+     RC(winG,116,72,568,30,{rx:4,fill:'#E8F6EE',stroke:'#0B8F4D','stroke-width':2}); Tx(winG,134,92,'☑  Example sign 0001   ·   '+MOD.model.name,{'font-size':15,fill:INK,'font-weight':700,id:'gRow'});
+     RC(winG,580,76,92,24,{rx:5,fill:'#fff',stroke:INK,'stroke-width':2,id:'gMove'}); Tx(winG,626,93,'Move',{class:'ar','font-size':14,'font-weight':800,fill:INK,'text-anchor':'middle'});
+    const dlg=mk('g',{id:'gDlg',opacity:0},winG);
+     RC(dlg,200,120,400,176,{rx:8,fill:'#fff',stroke:INK,'stroke-width':3}); Tx(dlg,218,146,'Move to which group?',{class:'ar','font-size':16,'font-weight':800,fill:INK});
+    ['Example group A','Example group B (newer firmware)','Example group C'].forEach((g,i)=>{ RC(dlg,214,158+i*30,372,26,{rx:4,fill:i===1?'#DCE3FF':'#F4F5F8',id:'gg'+i});Tx(dlg,226,176+i*30,g,{'font-size':14,fill:INK,'font-weight':i===1?800:400});});
+     RC(dlg,214,254,80,30,{rx:15,fill:INK,id:'gGo'}); Tx(dlg,254,274,'Move',{class:'ar','font-size':14,'font-weight':800,fill:'#fff','text-anchor':'middle'});
+    Tx(winG,134,138,'A new device has no group. Current groups carry newer firmware,',{'font-size':14,fill:INK}); Tx(winG,134,158,'WAN Verify and an APN lock.',{'font-size':14,fill:INK});
+    Tx(winG,134,290,'It takes a few minutes to accept the change, then goes back online.',{'font-size':13,fill:'#555',id:'gNote'});
+  } else {
+    const boxes=[['Laptop','plugged into the modem’s Ethernet port'],['Log in','address 192.0.2.1, login on the modem'],['Start NetCloud OS','after logging in'],['Connection Manager','status and error code']];
+    boxes.forEach((b,i)=>{const x=118+i*144;const g=mk('g',{class:'dbox',id:'db'+i},winG); RC(g,x,96,128,86,{rx:8,fill:i===3?'#DCE3FF':'#fff',stroke:INK,'stroke-width':2.5});Tx(g,x+64,128,b[0],{class:'ar','font-size':12,'font-weight':800,fill:INK,'text-anchor':'middle'});
+      b[1].split(' ').reduce((a,w)=>{const l=a[a.length-1];if((l+' '+w).length>16)a.push(w);else a[a.length-1]=(l+' '+w).trim();return a;},['']).forEach((ln,j)=>Tx(g,x+64,150+j*15,ln,{'font-size':12,fill:'#444','text-anchor':'middle'}));
+      if(i<3) mk('path',{d:'M'+(x+130)+' 139 h12 M'+(x+136)+' 133 l6 6 l-6 6',fill:'none',stroke:INK,'stroke-width':2.5},winG);});
+     RC(winG,118,214,564,66,{rx:8,fill:'#fff',stroke:INK,'stroke-width':2.5,id:'dCfg'});
+    Tx(winG,134,238,'Config changes can be made right on the device to get it online:',{'font-size':14,fill:INK}); Tx(winG,134,262,'for example adding a Default Override with our APN (example.apn here).',{'font-size':14,fill:INK,'font-weight':700});
+    Tx(winG,118,300,'The first S400 login asks for a new password. Set it to the shop standard.',{'font-size':12,fill:'#555'});
+  }
+}
+const CASES={
+ light:{lbl:'Modem light error',out:'A light that is not good: start with a power cycle.',items:()=>[['Read the light (step 6)',0],['Unplug the adapter from the power strip. Wait one minute.',0],['Plug it back in and let the modem boot',0],['Light still bad? Check provisioning in ThingSpace (step 8)',0],['Then check signal quality in Netcloud (step 9)',1]]},
+ sim:{lbl:'Open SIM',out:'The SIM is open or loose.',items:()=>MOD.model.key==='ib'?[['Blinking red and all four signal bars blinking together',0],['Open the module and find the modem',0],['Close the SIM door and seat the SIM',0],['Read the light again: it should start connecting',1]]:[['The S400 has no signal bars. Blinking red there is a data error.',0],['Check the SIM trays and the expansion door are closed',0],['Power cycle: adapter out of the strip for one minute',0],['Still red? Check provisioning and signal',1]]},
+ ts:{lbl:'ThingSpace OK, Netcloud off',out:'The modem works but is not provisioned right.',items:()=>[['ThingSpace says Connected, Netcloud says disconnected',0],['That is a provisioning problem, not a modem fault',0],['ThingSpace: Action, then Change Plan',0],['Switch to the opposite of the current setting',0],['Every sign should end on Private Static, with the right pool',1]]},
+ susp:{lbl:'Suspended',out:'Verizon has the line suspended.',items:()=>[['ThingSpace shows the device as Suspended',0],['Open the Action menu',0],['Choose Resume',0],['Give the modem a few minutes, then read the light',1]]},
+ weak:{lbl:'Weak signal',out:'RSRP weaker than −95 dBm is a problem.',items:()=>[['Health tab: RSRP weaker than −95 dBm',0],['Antennas not between or inside any cabinets or structures',0],['Cable connections tight and free of corrosion',0],['Sign properly grounded, to cut noise (SINR)',1]]},
+ nolic:{lbl:'Not in Netcloud',out:'Netcloud cannot find the device.',items:()=>[['Filter for the device in Netcloud: not found',0],['Check the Unlicensed Devices document for a temporary re-licence',0],['Online in the last 30 days? Then the Health tab has data',1]]}
+};
+function drawFlow(items){
+  flowG.innerHTML=''; let y=18;
+  items.forEach((it,i)=>{
+    const h=it[0].length>58?58:44; const last=i===items.length-1&&it[1];
+    const g=mk('g',{class:'fb'},flowG);
+     RC(g,110,y,580,h,{rx:12,fill:last?'#0B8F4D':'#F4F5F8',stroke:last?'#0B8F4D':INK,'stroke-width':2.5});
+    const words=it[0].split(' '); let lines=[''];words.forEach(w=>{const l=lines[lines.length-1];if((l+' '+w).length>56)lines.push(w);else lines[lines.length-1]=(l+' '+w).trim();});
+    lines.forEach((ln,j)=>Tx(g,400,y+(lines.length===1?h/2+6:22+j*19),ln,{class:'ar','font-size':16,'font-weight':700,fill:last?'#fff':INK,'text-anchor':'middle'}));
+    if(i<items.length-1){const a=mk('g',{class:'fa'},flowG); mk('path',{d:'M400 '+(y+h)+' v12 m-6 -6 l6 6 l6 -6',fill:'none',stroke:'currentColor','stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'},a);}
+    y+=h+16;
+  });
+}
+const gaugeCfg=()=>[-95,-60,0,0,'dBm'];
+function sigRender(v){render(v);statusEl.textContent=v>=-95?'Strong':(v>=-115?'Weak':'Very weak');}
+function sigSetup(){
+  configureGauge(-95,-60,0,0,'dBm'); G.hi=1e9;
+  zone.style.width=(100-pct(-95))+'%'; tickHi.textContent=''; rule.textContent='Strong: −95 dBm or better (RSRP)';
+  slider.min=G.min; slider.max=G.max; slider.step=.5;
+}
+const MOD={ORDER,TITLES,THEME_OF,CAP,MODELS,model:MODELS.ib,gaugeCfg,SLIDER:['signal'],
+  init(){},
+  kill(){gsap.killTweensOf(['#rings','#path','#bench','#win','#flow','#modem','#ants','#cabExt','#cabLan','#power','#tape','#cab','#ctl','#dataIn','#mdmLbl','.fb','.fa']);},
+  onSlide(v){ if(cur===ORDER.indexOf('signal')){ S.rsrp=v; statusEl.textContent=v>=-95?'Strong':(v>=-115?'Weak':'Very weak'); } },
+  prep(id){
+    const m=MOD.model, pos=ORDER.indexOf(id);
+    if(MOD.built!==m.key){MOD.built=m.key;buildModem();buildBench();}
+    document.body.classList.toggle('nog',id!=='signal');
+    gsap.set('#rings',{autoAlpha:0}); $('#outcome').textContent='';
+    const benchOn=['mount','cable','power','ants','lights'].includes(id);
+    gsap.set('#path',{autoAlpha:id==='intro'?1:0}); gsap.set('#bench',{autoAlpha:benchOn?1:0}); gsap.set(['#win','#flow'],{autoAlpha:0});
+    const prior={mount:[],cable:['cab','ctl','tape','modem','mdmLbl'],power:['cab','ctl','tape','modem','mdmLbl','cabExt','cabLan','dataIn'],ants:['cab','ctl','tape','modem','mdmLbl','cabExt','cabLan','dataIn','power'],lights:['cab','ctl','tape','modem','mdmLbl','cabExt','cabLan','dataIn','power','ants']}[id]||[];
+    ['cab','ctl','tape','modem','mdmLbl','cabExt','cabLan','dataIn','power','ants'].forEach(p=>gsap.set('#'+p,{autoAlpha:prior.includes(p)?1:0,y:0,x:0}));
+    gsap.set('#modem',{x:MX,y:MY,scale:MS,transformOrigin:'0px 0px',autoAlpha:prior.includes('modem')?1:0});
+    prepDash('#cabExt .cp',pos>=3); prepDash('#cabLan .cp',pos>=3); prepDash('#power .cp',pos>=4);
+    applyLed({});
+    if(id==='power'||id==='ants') applyLed(MOD.model.key==='ib'?{p:1,m:['g',1]}:{c:['g',1]});
+    if(id==='lights'){ showLight(S.light[m.key]); $('#outcome').textContent='';
+      setPick('Example light',lightList().map(l=>[l[0],l[1]]),S.light[m.key],v=>{S.light[m.key]=v;showLight(v);}); gsap.set('#pick',{autoAlpha:0}); }
+    const chk={mount:['Right module: left of the controller','Modem fixed down (tape or screw)'],cable:['Extension cables on the modem','Cables run to DATA IN','LAN from the modem to the controller'],power:['Power cable on the modem','Adapter into the power strip','Modem light comes on'],ants:['Antennas into DATA IN','Mounted high, not between or inside cabinets']};
+    if(chk[id]) setChecks(chk[id]);
+    if(id==='find'){ buildNetcloud(); gsap.set('#win',{autoAlpha:0}); fadeS(['#nc1','#nc2','#nc3']);
+      setChecks(['Devices tab: select the device','Connection Status','Select the Internal modem','Scroll to MDN, the phone number']); }
+    if(id==='plan'){ buildThing(); S.tsPick=S.ts;
+      setChecks(['Plan is Private Static, never Public Dynamic','Pick the IP pool: in-house pool for GRS and Core signs, wholesale pool for any other dealer']);
+      setPick('ThingSpace shows',[['active','Active, online'],['susp','Suspended'],['disc','Disconnected'],['mism','Connected, Netcloud off']],S.ts,v=>{S.ts=v;go(cur);}); gsap.set('#pick',{autoAlpha:0});
+      const k=S.ts; const bd=$('#tsBadge'),bt=$('#tsBadgeT');
+      const st={active:['Active','#0B8F4D','online'],susp:['Suspended','#B7791F','offline'],disc:['Disconnected','#C81E24','offline'],mism:['Connected','#0B8F4D','disconnected']}[k];
+      bd.setAttribute('fill',st[1]); bt.textContent=st[0]; $('#tsNc').textContent=st[2]; $('#tsNc').setAttribute('fill',st[2]==='online'?'#0B8F4D':'#C81E24');
+      $('#tsPlan').textContent=k==='mism'?'Public Dynamic':'Private Static'; }
+    if(id==='signal'){ buildHealth(); sigSetup(); setChecks(['RSRP (LTE): −95 dBm or better is strong. −115 is very weak.','RSSI is the 3G reading: −70 dBm is strong.','RSRQ: 0 dB best to −20 dB worst.','SINR is noise: ground the sign properly.']); $$('#checks li').forEach(li=>li.dataset.s='now'); render(null); }
+    if(id==='fix'){ buildFix();
+      setChecks(S.fix==='group'?['Tick the device, then Move','Pick the right group','Wait a few minutes: it goes back online']:['Laptop on the modem’s Ethernet port','Log in, then Start NetCloud OS','Open Connection Manager: status and error code','Config changes can be made here, e.g. a Default Override']);
+      setPick('Fix by',[['group','Move to group'],['direct','Direct connect']],S.fix,v=>{S.fix=v;go(cur);}); gsap.set('#pick',{autoAlpha:0}); }
+    if(id==='trouble'){ const c=CASES[S.tr]; drawFlow(c.items()); gsap.set('#flow',{autoAlpha:0});
+      setPick('Symptom',Object.keys(CASES).map(k=>[k,CASES[k].lbl]),S.tr,v=>{S.tr=v;go(cur);}); gsap.set('#pick',{autoAlpha:0}); }
+  },
+  scenes:{
+    intro(t){
+      t.fromTo(['#pnCtl','#pnMdm','#pnTwr','#pnCld'],{y:30,autoAlpha:0},{y:0,autoAlpha:1,duration:.7,ease:'power3.out',stagger:.25},.2);
+      t.fromTo('.fl',{opacity:0},{opacity:1,duration:.4,stagger:.25},.9);
+      t.call(()=>setTag('Work from the modem outward'),null,2);
+    },
+    mount(t){
+      t.fromTo(['#cab','#ctl'],{autoAlpha:0,y:20},{autoAlpha:1,y:0,duration:.6,stagger:.1,ease:'power3.out'},.2);
+      t.fromTo('#tape',{autoAlpha:0,y:-10},{autoAlpha:1,y:0,duration:.5},1.0);
+      t.fromTo(['#modem','#mdmLbl'],{autoAlpha:0},{autoAlpha:1,duration:.1},1.5);
+      t.fromTo('#modem',{y:MY-60},{y:MY,duration:.8,ease:'power2.out'},1.5);
+      t.call(()=>{check(0,'ok');},null,1.3); t.call(()=>{check(1,'ok');setTag('Pressed down firmly on the tape');},null,2.4);
+    },
+    cable(t){
+      t.fromTo('#dataIn',{autoAlpha:0,x:30},{autoAlpha:1,x:0,duration:.6,ease:'power3.out'},.2);
+      t.fromTo('#cabExt',{autoAlpha:0},{autoAlpha:1,duration:.1},1.0);
+      $$('#cabExt .cp').forEach(p=>t.fromTo(p,{strokeDashoffset:+p.dataset.len},{strokeDashoffset:0,duration:1.1,ease:'power2.inOut'},1.0));
+      t.call(()=>{check(0,'ok');},null,1.4); t.call(()=>{check(1,'ok');setTag('Extension cables to DATA IN');},null,2.2);
+      t.fromTo('#cabLan',{autoAlpha:0},{autoAlpha:1,duration:.1},2.6);
+      $$('#cabLan .cp').forEach(p=>t.fromTo(p,{strokeDashoffset:+p.dataset.len},{strokeDashoffset:0,duration:1.4,ease:'power2.inOut'},2.6));
+      t.call(()=>{check(2,'ok');setTag('LAN to the controller');},null,4.1);
+    },
+    power(t){
+      t.fromTo('#live',{autoAlpha:0},{autoAlpha:1,duration:.3},.2); t.call(()=>{$('#liveTxt').textContent='Mains power';},null,0);
+      t.fromTo('#power',{autoAlpha:0},{autoAlpha:1,duration:.1},.4);
+      $$('#power .cp').forEach(p=>t.fromTo(p,{strokeDashoffset:+p.dataset.len},{strokeDashoffset:0,duration:1.2,ease:'power2.inOut'},.4));
+      t.call(()=>check(0,'ok'),null,1.2); t.call(()=>check(1,'ok'),null,1.8);
+      t.call(()=>{applyLed(MOD.model.key==='ib'?{p:1,m:['g',1]}:{c:['g',1]});check(2,'ok');setTag('Green and blinking: starting up');},null,2.4);
+    },
+    ants(t){
+      t.fromTo('#ants',{autoAlpha:0,y:20},{autoAlpha:1,y:0,duration:.7,ease:'power3.out'},.4);
+      ring(t,606,52,178,130,1.1);
+      t.call(()=>check(0,'ok'),null,1.6); t.call(()=>{check(1,'ok');setTag('High, in the open');},null,2.6);
+    },
+    lights(t){
+      const m=MOD.model, W=m.W,H=m.H, sc=1.9, tx=(800-W*sc)/2, ty=(340-H*sc)/2+6;
+      t.to(['#cab','#ctl','#tape','#cabExt','#cabLan','#dataIn','#power','#ants','#mdmLbl'],{autoAlpha:0,duration:.5},0);
+      t.to('#modem',{x:tx,y:ty,scale:sc,transformOrigin:'0px 0px',duration:1.1,ease:'power3.inOut'},.2);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},1.2);
+      t.call(()=>showLight(S.light[m.key]),null,1.3);
+    },
+    find(t){
+      t.fromTo('#win',{autoAlpha:0,y:24},{autoAlpha:1,y:0,duration:.6,ease:'power3.out'},.2);
+      t.fromTo('#nc1',{autoAlpha:0},{autoAlpha:1,duration:.3},.4);
+      ring(t,116,148,568,34,1.0); t.call(()=>check(0,'ok'),null,1.4);
+      t.to('#nc1',{autoAlpha:0,duration:.3},2.2); t.to('#rings',{autoAlpha:0,duration:.2},2.2);
+      t.fromTo('#nc2',{autoAlpha:0},{autoAlpha:1,duration:.4},2.4);
+      ring(t,120,136,260,150,2.7); t.call(()=>check(1,'ok'),null,3.0);
+      t.to('#nc2',{autoAlpha:0,duration:.3},4.4); t.to('#rings',{autoAlpha:0,duration:.2},4.4);
+      t.fromTo('#nc3',{autoAlpha:0},{autoAlpha:1,duration:.4},4.6); t.call(()=>check(2,'ok'),null,4.8);
+      ring(t,446,120,230,26,5.2); t.call(()=>{check(3,'ok');setTag('MDN: the number for ThingSpace');},null,5.6);
+    },
+    plan(t){
+      const k=S.ts;
+      t.fromTo('#win',{autoAlpha:0,y:24},{autoAlpha:1,y:0,duration:.6,ease:'power3.out'},.2);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.6);
+      t.call(()=>check(0,k==='mism'?'bad':'ok'),null,1.2);
+      if(k==='susp'){ t.to('#tsMenu',{autoAlpha:1,duration:.3},1.6); ring(t,524,236,146,26,1.9);
+        t.call(()=>{$('#tsBadgeT').textContent='Active';$('#tsBadge').setAttribute('fill','#0B8F4D');$('#tsNc').textContent='online';$('#tsNc').setAttribute('fill','#0B8F4D');},null,3.6); t.to(['#tsMenu','#rings'],{autoAlpha:0,duration:.3},3.6); }
+      if(k==='mism'){ t.to('#tsMenu',{autoAlpha:1,duration:.3},1.6); ring(t,524,176,146,26,1.9);
+        t.to(['#tsMenu','#rings'],{autoAlpha:0,duration:.3},3.4);
+        t.call(()=>{$('#tsPlan').textContent='Private Static';check(0,'ok');},null,3.6); t.to('#tsPool',{autoAlpha:1,duration:.4},3.6); t.call(()=>check(1,'ok'),null,4.2); }
+      if(k==='active') t.call(()=>check(1,'ok'),null,1.8);
+      t.call(()=>{ $('#outcome').textContent=({active:'Active and connected: Verizon sees the device. If Netcloud agrees, provisioning is fine.',susp:'Suspended: resume it under the Action menu.',disc:'Disconnected: Verizon is not seeing the device on the network. Check the modem, SIM and signal.',mism:'Connected here, offline in Netcloud: a provisioning problem. Change Plan to the opposite setting.'})[k]; setTag(({active:'Active',susp:'Resumed',disc:'Not seen by Verizon',mism:'Plan changed'})[k]); },null,2.2);
+    },
+    signal(t){
+      t.fromTo('#win',{autoAlpha:0,y:24},{autoAlpha:1,y:0,duration:.6,ease:'power3.out'},.2);
+      t.fromTo('#meter',{x:20,autoAlpha:.6},{x:0,autoAlpha:1,duration:.5},.2);
+      P.val=-60; sigRender(-60);
+      t.to(P,{val:-112,duration:2.4,ease:'power3.out',onUpdate:()=>sigRender(P.val)},1.0);
+      t.call(()=>{slider.value=-112;S.rsrp=-112;setTag('RSRP −112: weak');},null,3.5);
+    },
+    fix(t){
+      t.fromTo('#win',{autoAlpha:0,y:24},{autoAlpha:1,y:0,duration:.6,ease:'power3.out'},.2);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.6);
+      if(S.fix==='group'){
+        t.call(()=>check(0,'ok'),null,1.2); ring(t,116,72,568,30,1.0); t.to('#rings',{autoAlpha:0,duration:.2},2.0);
+        t.to('#gDlg',{autoAlpha:1,duration:.4},2.2); ring(t,214,188,372,26,2.5); t.call(()=>check(1,'ok'),null,3.0);
+        t.call(()=>{check(2,'ok');setTag('Group changed');},null,4.2);
+      } else {
+        [0,1,2,3].forEach(i=>{t.fromTo('#db'+i,{autoAlpha:0,y:12},{autoAlpha:1,y:0,duration:.4},.6+i*.6); t.call(()=>check(i,'ok'),null,.9+i*.6);});
+        t.fromTo('#dCfg',{autoAlpha:0},{autoAlpha:1,duration:.4},3.2);
+      }
+    },
+    trouble(t){
+      const k=S.tr,c=CASES[k],items=c.items();
+      t.fromTo('#flow',{autoAlpha:0},{autoAlpha:1,duration:.3},.2);
+      t.fromTo('.fb',{y:16,autoAlpha:0},{y:0,autoAlpha:1,duration:.4,stagger:.5,ease:'power3.out'},.5);
+      t.fromTo('.fa',{autoAlpha:0},{autoAlpha:1,duration:.3,stagger:.5},.8);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.4);
+      setChecks([]);
+      t.call(()=>{$('#outcome').textContent=c.out;setTag(c.lbl);},null,.6);
+    }
+  }
+};
+
+/* ---------- player ---------- */
+let steps=MOD.ORDER.slice(), cur=0, tl=null, auto=false, autoCall=null;
+function renderChips(){
+  const box=$('#models'); box.innerHTML='';
+  if(!MOD.MODELS){return;}
+  Object.values(MOD.MODELS).forEach(m=>{
+    const b=document.createElement('button'); b.className='chip'; b.setAttribute('aria-pressed',m===MOD.model);
+    b.innerHTML='<b>'+m.name+'</b><small>'+m.gen+'</small>'; b.onclick=()=>{MOD.model=m;renderChips();go(cur);}; box.appendChild(b);
+  });
+}
+function renderRail(){
+  const ol=$('#rail ol'); ol.innerHTML='';
+  steps.forEach((id,i)=>{
+    const li=document.createElement('li'); const b=document.createElement('button');
+    b.className=i===cur?'on':''; if(i===cur)b.setAttribute('aria-current','step');
+    b.innerHTML='<span class="n">'+(i+1)+'</span><span class="t">'+MOD.TITLES[id]+'</span>'; b.onclick=()=>go(i);
+    li.appendChild(b); ol.appendChild(li);
+  });
+}
+const cap=$('#cap');
+function caption(t,text){
+  cap.innerHTML='';
+  text.split(' ').forEach((w,i,a)=>{const s=document.createElement('span');s.className='w';s.textContent=w+(i<a.length-1?' ':'');cap.appendChild(s);});
+  t.fromTo(cap.children,{y:16,autoAlpha:0},{y:0,autoAlpha:1,duration:.4,stagger:.03,ease:'power2.out'},.2);
+}
+function setBtns(){ $('#bBack').disabled=cur===0; $('#bNext').textContent=cur===steps.length-1?'Restart':'Next'; }
+function done(id){
+  slider.disabled=!(MOD.SLIDER||[]).includes(id);
+  if(MOD.done)MOD.done(id);
+  if(autoCall){autoCall.kill();autoCall=null;}
+  if(auto&&cur<steps.length-1) autoCall=gsap.delayedCall(2.8,()=>go(cur+1));
+}
+function baseReset(){
+  gsap.set(['#plateWrap','#meter'],{autoAlpha:1,x:0,y:0});
+  gsap.set('#verdict',{autoAlpha:0});
+  gsap.set('#live',{autoAlpha:0,y:0});
+  gsap.set('#tag',{autoAlpha:0,y:0});
+  slider.disabled=true; gsap.killTweensOf(P);
+  if(probeB){probePark(probeB,[0,0,0]);probePark(probeR,[0,0,0]);}
+  configureGauge(...(MOD.gaugeCfg?MOD.gaugeCfg():[0,1,2,1,'V DC'])); render(null);
+  setPick('',null); setChecks([]);
+}
+function go(i){
+  i=Math.max(0,Math.min(steps.length-1,i));
+  if(tl)tl.kill(); if(autoCall){autoCall.kill();autoCall=null;}
+  gsap.killTweensOf(['#tag']);
+  if(MOD.kill)MOD.kill();
+  cur=i; const id=steps[i];
+  renderRail(); baseReset(); MOD.prep(id);
+  tl=gsap.timeline({onComplete:()=>done(id)});
+  themeTween(tl,MOD.THEME_OF[id],0);
+  caption(tl,MOD.CAP[id](MOD.model));
+  MOD.scenes[id](tl);
+  setBtns();
+  if(reduce) tl.progress(1);
+}
+$('#bNext').onclick=()=>go(cur===steps.length-1?0:cur+1);
+$('#bBack').onclick=()=>go(cur-1);
+$('#bReplay').onclick=()=>go(cur);
+$('#bAuto').onclick=function(){
+  auto=!auto; this.setAttribute('aria-pressed',auto);
+  if(auto&&tl&&!tl.isActive()&&cur<steps.length-1&&!autoCall) autoCall=gsap.delayedCall(1.2,()=>go(cur+1));
+  if(!auto&&autoCall){autoCall.kill();autoCall=null;}
+};
+document.addEventListener('keydown',e=>{
+  if(e.target&&e.target.type==='range')return;
+  if(e.key==='ArrowRight')go(cur+1); else if(e.key==='ArrowLeft')go(cur-1); else if(e.key==='r'||e.key==='R')go(cur);
+});
+if(MOD.init)MOD.init();
+renderChips(); go(0);
+
+})();
+</script>
+</body>
+</html>

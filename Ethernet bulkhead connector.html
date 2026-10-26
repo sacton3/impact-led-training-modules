@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ethernet bulkhead connector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --panel:#F4F5F8; --panel-ink:#14161C; --pass:#0B8F4D; --fail:#C81E24;
+  --bg:#2336D8; --fg:#F4F6FF;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+}
+:root[data-theme="dark"]{ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+
+*,*::before,*::after{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid currentColor;outline-offset:3px}
+
+#app{min-height:100%;display:grid;grid-template-columns:minmax(0,1fr);gap:18px 28px;padding:18px clamp(14px,3vw,36px) 22px}
+@media (min-width:900px){
+  #app{height:100%;grid-template-columns:190px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+  header,footer{grid-column:1 / -1}
+}
+
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+h1{margin:0;font-family:Archivo,"Helvetica Neue",Arial,sans-serif;font-weight:800;font-stretch:112%;font-size:clamp(20px,2.4vw,28px);letter-spacing:-.01em}
+#models{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;flex-direction:column;align-items:flex-start;border:2px solid currentColor;background:transparent;border-radius:14px;padding:6px 14px;min-height:44px;line-height:1.15;transition:background-color .2s,color .2s}
+.chip b{font-family:Archivo,sans-serif;font-weight:800;font-size:15px}
+.chip small{font-size:12px;opacity:.85}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+#rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+#rail button{display:flex;align-items:baseline;gap:12px;width:100%;text-align:left;background:none;border:0;border-left:5px solid transparent;padding:9px 0 9px 12px;opacity:.5;transition:opacity .2s}
+#rail button:hover{opacity:.85}
+#rail button.on{opacity:1;border-left-color:currentColor}
+#rail .n{font-family:Archivo,sans-serif;font-weight:800;font-size:22px;min-width:1.1em}
+#rail .t{font-size:16px;font-weight:700}
+@media (max-width:899px){
+  #rail ol{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px}
+  #rail button{border-left:0;border-bottom:4px solid transparent;padding:6px 10px;white-space:nowrap;width:auto}
+  #rail button.on{border-bottom-color:currentColor}
+}
+
+#stage{position:relative;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:center}
+@media (min-width:900px){ #stage{grid-template-columns:minmax(0,1fr) 350px} }
+#plateWrap{min-height:0;height:100%;display:flex;align-items:center;justify-content:center}
+#plateWrap svg{width:100%;height:auto;max-height:100%;overflow:hidden}
+svg text{font-family:"Atkinson Hyperlegible",system-ui,sans-serif}
+.ar{font-family:Archivo,"Helvetica Neue",Arial,sans-serif !important}
+
+/* instrument panel */
+#meter{background:var(--panel);color:var(--panel-ink);border:3px solid var(--panel-ink);border-radius:22px;padding:16px 18px 18px;display:flex;flex-direction:column;gap:10px}
+.mode{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{display:inline-block;border:2px solid var(--panel-ink);border-radius:999px;font-weight:700;font-size:14px;padding:5px 12px;background:var(--panel-ink);color:var(--panel)}
+.note{font-size:13px;opacity:.7}
+.read{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-height:1em}
+#num{font-family:Archivo,sans-serif;font-weight:800;font-stretch:105%;font-size:clamp(56px,6vw,84px);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+#unit{font-family:Archivo,sans-serif;font-weight:700;font-size:26px}
+#status{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:16px;color:var(--panel-ink)}
+#status::before{content:"";width:12px;height:12px;border-radius:50%;background:currentColor;opacity:.35}
+#meter[data-state="pass"] #status{color:var(--pass)}
+#meter[data-state="pass"] #status::before{opacity:1}
+#meter[data-state="fail"] #status{color:var(--fail)}
+#meter[data-state="fail"] #status::before{opacity:1}
+.gauge{position:relative;height:78px;margin:4px 8px 0}
+.gauge .bar{position:absolute;left:0;right:0;top:27px;height:14px;border-radius:7px;background:color-mix(in srgb,var(--panel-ink) 16%,transparent)}
+#zone{position:absolute;top:23px;height:22px;border-radius:5px;background:var(--pass)}
+#marker{position:absolute;top:7px;width:4px;height:54px;margin-left:-2px;border-radius:2px;background:var(--panel-ink);opacity:0}
+#marker::before{content:"";position:absolute;top:-5px;left:50%;width:12px;height:12px;background:inherit;transform:translateX(-50%) rotate(45deg)}
+#meter[data-state="fail"] #marker{background:var(--fail)}
+.tick{position:absolute;top:54px;transform:translateX(-50%);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+#rule{font-size:14px;opacity:.8}
+.slide{display:flex;flex-direction:column;gap:4px;font-size:13px;opacity:.9}
+.slide input{width:100%;accent-color:var(--panel-ink)}
+.slide input:disabled{opacity:.35}
+
+/* paperwork flow */
+#verdict{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;align-content:center;visibility:hidden;opacity:0}
+.vh{font-family:Archivo,sans-serif;font-weight:800;font-size:clamp(16px,1.8vw,22px);padding:0 4px}
+.vc{border-radius:16px;padding:14px 18px;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(16px,1.7vw,24px);line-height:1.2;color:#fff}
+.vc.pass{background:#0B8F4D}
+.vc.fail{background:#C81E24}
+.vc.merge{grid-column:1 / -1;background:transparent;color:inherit;border:3px solid currentColor}
+.conn{width:4px;height:20px;background:currentColor;margin:0 auto;transform-origin:top center}
+
+footer{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 28px}
+#cap{margin:0;flex:1 1 320px;max-width:62ch;min-height:3.6em;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(20px,2.2vw,30px);line-height:1.18}
+.w{display:inline-block;white-space:pre}
+#ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:2px solid currentColor;background:transparent;border-radius:999px;padding:9px 18px;min-height:44px;font-weight:700;font-size:16px}
+.btn:disabled{opacity:.35;cursor:default}
+.btn.go{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn[aria-pressed="true"]{box-shadow:inset 0 0 0 3px currentColor}
+#num.word{font-size:clamp(34px,3.8vw,50px)}
+#pick{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;font-weight:700}
+#pick button{border:2px solid var(--panel-ink);background:transparent;color:var(--panel-ink);border-radius:999px;padding:4px 12px;min-height:32px}
+#pick button[aria-pressed="true"]{background:var(--panel-ink);color:var(--panel)}
+#outcome{font-size:15px;font-weight:700;min-height:2.6em}
+
+#checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700}
+#checks li{display:flex;gap:10px;align-items:flex-start;opacity:.55}
+#checks .bx{flex:none;width:18px;height:18px;border:2px solid var(--panel-ink);border-radius:5px;margin-top:1px;position:relative}
+#checks li[data-s="now"]{opacity:1}
+#checks li[data-s="ok"]{opacity:1}
+#checks li[data-s="ok"] .bx{background:var(--pass);border-color:var(--pass)}
+#checks li[data-s="ok"] .bx::after{content:"";position:absolute;left:4px;top:0;width:5px;height:10px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+#checks li[data-s="bad"]{opacity:1;color:var(--fail)}
+#checks li[data-s="bad"] .bx{background:var(--fail);border-color:var(--fail)}
+#checks li[data-s="bad"] .bx::after{content:"\00D7";position:absolute;inset:-4px 0 0 0;text-align:center;color:#fff;font-size:17px;line-height:20px}
+.nog #num,.nog #unit,.nog #status,.nog .gauge,.nog #rule,.nog .slide,.nog .read{display:none}</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Ethernet bulkhead connector</h1>
+    <div id="models" role="group" aria-label="Build"></div>
+  </header>
+  <nav id="rail" aria-label="Steps"><ol></ol></nav>
+  <main id="stage">
+    <div id="plateWrap">
+      <svg viewBox="0 0 800 340" role="img" aria-label="Cat5e cable with a bulkhead connector kit: backshell, gray inner part, clear RJ45 connector and silver housing">
+        <defs><linearGradient id="silverG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2F4F6"/><stop offset=".5" stop-color="#C5CAD1"/><stop offset="1" stop-color="#8E959E"/></linearGradient>
+<linearGradient id="yelG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFD83A"/><stop offset="1" stop-color="#E0A800"/></linearGradient>
+<linearGradient id="jkG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A3A8B0"/><stop offset="1" stop-color="#6E747D"/></linearGradient>
+          <linearGradient id="fadeG" gradientUnits="userSpaceOnUse" x1="0" y1="330" x2="0" y2="340"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
+          <mask id="fadeM" maskUnits="userSpaceOnUse" x="-200" y="-200" width="1400" height="1000"><rect x="-200" y="-200" width="1400" height="1000" fill="url(#fadeG)"/></mask>
+          <filter id="blur" x="-10%" y="-200%" width="120%" height="500%"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+        
+<g id="work" opacity="0">
+  <g id="offcut"><rect id="ocR" x="548" y="129" width="152" height="22" rx="11" fill="url(#jkG)" stroke="#4b5058" stroke-width="2"/></g>
+  <rect id="jacket" x="-30" y="129" width="590" height="22" rx="11" fill="url(#jkG)" stroke="#4b5058" stroke-width="2"/>
+  <text id="cabLbl" class="ar" x="30" y="108" font-size="14" font-weight="800" fill="currentColor">Cat5e cable</text>
+  <path id="stringL" d="M470 140 H575" stroke="#F4F6FF" stroke-width="2" stroke-linecap="round" opacity="0"/>
+  <g id="wiresG"></g>
+  <g id="wlab"></g>
+  <g id="ruler" opacity="0"><path d="M470 100 V92 H560 V100" fill="none" stroke="currentColor" stroke-width="3"/><text class="ar" x="515" y="84" font-size="15" font-weight="800" fill="currentColor" text-anchor="middle">1½ in</text></g>
+  <g id="cutter" opacity="0"><path id="blA" d="M548 62 L575 62 L562 124 Z" fill="#C9CDD4" stroke="#14161C" stroke-width="2.5" stroke-linejoin="round"/><path id="blB" d="M548 218 L575 218 L562 156 Z" fill="#C9CDD4" stroke="#14161C" stroke-width="2.5" stroke-linejoin="round"/></g>
+  <g id="cc"><rect x="0" y="-22" width="70" height="44" rx="6" fill="#fff" fill-opacity=".28" stroke="#d8dde5" stroke-width="2.5"/>
+    <rect x="22" y="-30" width="32" height="8" rx="2" fill="#E9ECF1" stroke="#c4c9d2" stroke-width="1.5"/>
+    <g id="pins" fill="#C9A227"></g>
+    <rect x="3" y="-19" width="6" height="38" fill="#fff" fill-opacity=".25"/></g>
+  <g id="gr"><rect x="0" y="-18" width="56" height="36" rx="6" fill="#9AA0A6" stroke="#5b6168" stroke-width="2"/>
+    <g stroke="#6e747d" stroke-width="2.5"><path d="M8 -14V14M16 -14V14M24 -14V14M32 -14V14M40 -14V14M48 -14V14"/></g>
+    <rect id="clip" x="18" y="-27" width="24" height="10" rx="2" fill="#B4B9C0" stroke="#5b6168" stroke-width="1.8"/></g>
+  <g id="bs"><path d="M0 -12 L34 -15 L34 15 L0 12 Z" fill="#FF8A1F" stroke="#a24400" stroke-width="2" stroke-linejoin="round"/><g stroke="#cc6a10" stroke-width="2"><path d="M8 -11V11M16 -12V12M24 -13V13"/></g>
+    <rect x="34" y="-26" width="62" height="52" rx="9" fill="#1b1d22" stroke="#000" stroke-width="2.5"/><rect x="40" y="-20" width="50" height="8" rx="3" fill="#fff" opacity=".12"/></g>
+  <g id="hs"><rect x="0" y="-32" width="100" height="64" rx="9" fill="url(#silverG)" stroke="#6e747d" stroke-width="2.5"/>
+    <g stroke="#7f8690" stroke-width="2.2"><path d="M8 -32V32M16 -32V32M24 -32V32M32 -32V32"/></g>
+    <rect x="62" y="-38" width="12" height="76" rx="3" fill="url(#silverG)" stroke="#6e747d" stroke-width="2"/>
+    <rect x="82" y="-20" width="12" height="40" rx="2" fill="#2a2d33" opacity=".5"/></g>
+  <g id="jaws" opacity="0"><g id="jawT"><path d="M440 80 H524 V112 H440 Z" fill="url(#yelG)" stroke="#6b5200" stroke-width="2.5"/><path d="M524 84 L720 20 V50 L524 108 Z" fill="url(#yelG)" stroke="#6b5200" stroke-width="2.5"/><g stroke="#6b5200" stroke-width="2.5"><path d="M452 112V120M468 112V120M484 112V120M500 112V120M516 112V120"/></g></g>
+    <g id="jawB"><path d="M440 168 H524 V200 H440 Z" fill="url(#yelG)" stroke="#6b5200" stroke-width="2.5"/><path d="M524 196 L720 260 V230 L524 172 Z" fill="url(#yelG)" stroke="#6b5200" stroke-width="2.5"/><g stroke="#6b5200" stroke-width="2.5"><path d="M452 168V160M468 168V160M484 168V160M500 168V160M516 168V160"/></g></g></g>
+  <g id="clips"></g>
+  <g id="face" opacity="0"><circle cx="705" cy="70" r="46" fill="url(#silverG)" stroke="#6e747d" stroke-width="3"/><circle cx="705" cy="70" r="36" fill="#2a2d33"/><rect x="687" y="56" width="36" height="28" rx="3" fill="#0b0c0e" stroke="#9aa0a6" stroke-width="2"/><g fill="#C9A227"><rect x="691" y="72" width="2.6" height="9"/><rect x="696" y="72" width="2.6" height="9"/><rect x="701" y="72" width="2.6" height="9"/><rect x="706" y="72" width="2.6" height="9"/><rect x="711" y="72" width="2.6" height="9"/><rect x="716" y="72" width="2.6" height="9"/></g>
+    <text class="ar" x="705" y="132" font-size="13" font-weight="800" fill="currentColor" text-anchor="middle">Front of the housing</text></g>
+  <g id="tray"><text class="ar" x="60" y="318" font-size="12" font-weight="800" fill="currentColor" text-anchor="middle">Backshell</text><text class="ar" x="190" y="318" font-size="12" font-weight="800" fill="currentColor" text-anchor="middle">Gray inner</text><text class="ar" x="300" y="318" font-size="12" font-weight="800" fill="currentColor" text-anchor="middle">Clear RJ45</text><text class="ar" x="415" y="318" font-size="12" font-weight="800" fill="currentColor" text-anchor="middle">Silver housing</text>
+    <g id="kitTools"><rect x="560" y="226" width="110" height="64" rx="10" fill="url(#yelG)" stroke="#6b5200" stroke-width="2.5"/><text class="ar" x="615" y="254" font-size="12" font-weight="900" fill="#14161C" text-anchor="middle">STRIP  CUT</text><text class="ar" x="615" y="272" font-size="10" font-weight="800" fill="#14161C" text-anchor="middle">crimp tool</text>
+    <rect x="696" y="214" width="64" height="86" rx="9" fill="url(#yelG)" stroke="#6b5200" stroke-width="2.5"/><rect x="706" y="222" width="44" height="26" rx="2" fill="#8fa5c4"/><text class="ar" x="728" y="274" font-size="10" font-weight="800" fill="#14161C" text-anchor="middle">tester</text></g></g>
+</g>
+
+<g id="test" opacity="0">
+  <path id="tCab" d="M126 292 C126 330 400 330 560 200 C600 168 640 170 650 170" fill="none" stroke="#6b7078" stroke-width="12" stroke-linecap="round"/><path d="M126 292 C126 330 400 330 560 200 C600 168 640 170 650 170" fill="none" stroke="#8a8f97" stroke-width="7" stroke-linecap="round"/>
+  <rect x="50" y="20" width="150" height="276" rx="18" fill="url(#yelG)" stroke="#6b5200" stroke-width="3"/><rect x="50" y="170" width="150" height="40" fill="#14161C" opacity=".35"/>
+  <rect x="64" y="34" width="122" height="96" rx="6" fill="#B8CCE8" stroke="#14161C" stroke-width="3"/>
+  <text class="ar" x="74" y="54" font-size="13" font-weight="800" fill="#14161C" id="tRes"></text>
+  <g class="ar" font-size="17" font-weight="800" fill="#14161C" id="tRows"></g>
+  <text class="ar" x="125" y="150" font-size="10" font-weight="800" fill="#14161C" text-anchor="middle">LAN Scout Jr. 2</text>
+  <rect x="94" y="164" width="62" height="26" rx="13" fill="#2a2d33" stroke="#000" stroke-width="2"/><text class="ar" x="125" y="182" font-size="12" font-weight="900" fill="#fff" text-anchor="middle">TEST</text>
+  <circle id="tBtn" cx="125" cy="216" r="16" fill="#2a2d33" stroke="#000" stroke-width="2"/>
+  <rect x="104" y="270" width="44" height="30" rx="3" fill="#0b0c0e" stroke="#9aa0a6" stroke-width="2"/>
+  <rect x="640" y="124" width="116" height="92" rx="10" fill="#C5CAD1" stroke="#6e747d" stroke-width="3"/><text class="ar" x="698" y="170" font-size="15" font-weight="800" fill="#14161C" text-anchor="middle">Remote end</text><text x="698" y="190" font-size="12" fill="#14161C" text-anchor="middle">second connector</text>
+  <text class="ar" x="340" y="64" font-size="15" font-weight="800" fill="currentColor" text-anchor="middle">Finished cable: both ends built</text>
+</g>
+<g id="rings" opacity="0"><rect id="ringO" x="0" y="0" width="10" height="10" rx="8" fill="none" stroke="#fff" stroke-width="8"/><rect id="ringI" x="0" y="0" width="10" height="10" rx="8" fill="none" stroke="#14161C" stroke-width="3.5"/></g>
+
+        <g mask="url(#fadeM)">
+        <g id="probeB" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#15161a" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#15161a" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        <g id="probeR" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#E02B2B" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#E02B2B" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        </g>
+        <text id="tag" class="ar" x="20" y="334" font-size="20" font-weight="800" fill="currentColor" text-anchor="start" opacity="0"></text>
+        <g id="live" opacity="0">
+          <rect x="18" y="14" width="190" height="36" rx="18" fill="#14130C"/>
+          <circle id="liveDot" cx="40" cy="32" r="7" fill="#FFC800"/>
+          <text id="liveTxt" x="56" y="38" fill="#FFC800" font-size="17" font-weight="700">Mains live</text>
+        </g>
+      </svg>
+    </div>
+    <aside id="meter" data-state="idle" aria-label="Bench readout">
+      <div class="mode"><span class="pill" id="pill">Bulkhead build</span><span class="note">From the SOP photos</span></div>
+      <div class="read"><span id="num">---</span><span id="unit"></span></div>
+      <div id="status" aria-live="polite">Not measuring</div>
+      <div class="gauge" id="gauge" aria-hidden="true">
+        <div class="bar"></div><div id="zone"></div><div id="marker"></div>
+        <span class="tick" id="tickLo"></span><span class="tick" id="tickHi"></span>
+      </div>
+      <div id="rule"></div>
+      <label class="slide">Drag to try other readings
+        <input id="slider" type="range" min="0" max="1" step="0.01" value="0" disabled>
+      </label>
+      <ul id="checks" style="opacity:0;visibility:hidden"></ul>
+      <div id="pick" style="opacity:0;visibility:hidden"></div>
+      <div id="outcome" aria-live="polite"></div>
+    </aside>
+    <div id="verdict"></div>
+  </main>
+  <footer>
+    <p id="cap" aria-live="polite"></p>
+    <div id="ctl">
+      <button class="btn" id="bBack">Back</button>
+      <button class="btn" id="bReplay">Replay step</button>
+      <button class="btn" id="bAuto" aria-pressed="false">Auto-play</button>
+      <button class="btn go" id="bNext">Next</button>
+    </div>
+  </footer>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+const NS='http://www.w3.org/2000/svg';
+const mk=(tag,attrs,parent)=>{const e=document.createElementNS(NS,tag);Object.keys(attrs||{}).forEach(k=>e.setAttribute(k,attrs[k]));if(parent)parent.appendChild(e);return e;};
+const root=document.documentElement;
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const THEMES={blue:{bg:'#2336D8',fg:'#F4F6FF'},yellow:{bg:'#FFC800',fg:'#14130C'},paper:{bg:'#E9ECF3',fg:'#14161C'}};
+let theme={...THEMES.blue};
+const hex=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+const toHex=s=>s.startsWith('#')?s:'#'+s.match(/\d+/g).map(v=>(+v).toString(16).padStart(2,'0')).join('');
+const mix=(a,b,t)=>{const x=hex(toHex(a)),y=hex(toHex(b));return 'rgb('+x.map((v,i)=>Math.round(v+(y[i]-v)*t)).join(',')+')';};
+function applyTheme(){root.style.setProperty('--bg',theme.bg);root.style.setProperty('--fg',theme.fg);}
+function themeTween(t,key,pos){
+  const from={...theme}, to=THEMES[key], p={t:0};
+  t.to(p,{t:1,duration:reduce?0.01:0.7,ease:'power2.inOut',onUpdate(){
+    theme={bg:mix(from.bg,to.bg,p.t),fg:mix(from.fg,to.fg,p.t)}; applyTheme();
+  },onComplete(){theme={...to};applyTheme();}},pos);
+}
+applyTheme();
+
+/* ---------- meter / gauge ---------- */
+const meter=$('#meter'),num=$('#num'),unitEl=$('#unit'),statusEl=$('#status'),zone=$('#zone'),marker=$('#marker'),
+      tickLo=$('#tickLo'),tickHi=$('#tickHi'),rule=$('#rule'),slider=$('#slider');
+const G={lo:0,hi:1,min:0,max:1,dec:1,unit:'V DC'}; const R={v:null}; const P={val:0};
+const pct=v=>Math.max(0,Math.min(100,(v-G.min)/(G.max-G.min)*100));
+const fmt=(v,d)=>v.toFixed(d);
+function configureGauge(lo,hi,dec,tdec,unit){
+  const span=hi-lo;
+  Object.assign(G,{lo,hi,min:lo-span*0.9,max:hi+span*0.9,dec,unit});
+  zone.style.left=pct(lo)+'%'; zone.style.width=(pct(hi)-pct(lo))+'%';
+  tickLo.style.left=pct(lo)+'%'; tickHi.style.left=pct(hi)+'%';
+  tickLo.textContent=fmt(lo,tdec); tickHi.textContent=fmt(hi,tdec);
+  rule.textContent='Pass: '+fmt(lo,tdec)+' to '+fmt(hi,tdec)+' '+unit;
+  slider.min=G.min; slider.max=G.max; slider.step=(G.max-G.min)/300;
+}
+function render(v){
+  R.v=v;
+  if(v==null){num.textContent='---';unitEl.textContent='';meter.dataset.state='idle';statusEl.textContent='Not measuring';marker.style.opacity=0;return;}
+  marker.style.opacity=1; marker.style.left=pct(v)+'%';
+  num.textContent=fmt(v,G.dec); unitEl.textContent=G.unit;
+  const ok=v>=G.lo-1e-9&&v<=G.hi+1e-9;
+  meter.dataset.state=ok?'pass':'fail';
+  statusEl.textContent=ok?'In range':(v<G.lo?'Too low':'Too high');
+  slider.value=v;
+}
+slider.addEventListener('input',()=>{gsap.killTweensOf(P); render(+slider.value); if(typeof MOD!=='undefined'&&MOD.onSlide)MOD.onSlide(+slider.value);});
+
+/* ---------- shared helpers ---------- */
+const setTag=text=>{const e=$('#tag');if(!e)return;e.textContent=text;gsap.fromTo(e,{autoAlpha:0,y:8},{autoAlpha:1,y:0,duration:.35});};
+const drawIn=(t,sel,at,d)=>t.to(sel,{strokeDashoffset:0,duration:d||.6,ease:'power3.out'},at);
+function prepDash(sel,drawn){ $$(sel).forEach(p=>{const L=Math.ceil(p.getTotalLength())+2;p.dataset.len=L;p.style.strokeDasharray=L;p.style.strokeDashoffset=drawn?0:L;}); }
+/* checklist in the panel */
+function setChecks(items){
+  const ul=$('#checks'); ul.innerHTML='';
+  (items||[]).forEach((txt,i)=>{const li=document.createElement('li');li.dataset.s='off';li.innerHTML='<span class="bx"></span><span>'+txt+'</span>';ul.appendChild(li);});
+  gsap.set('#checks',{autoAlpha:(items&&items.length)?1:0});
+}
+function check(i,state){ const li=$$('#checks li')[i]; if(li)li.dataset.s=state; }
+function allChecks(state){ $$('#checks li').forEach(li=>li.dataset.s=state); }
+/* option buttons in the panel */
+let pickCb=null;
+function setPick(label,opts,cur,cb){
+  const box=$('#pick'); pickCb=cb;
+  if(!opts){box.innerHTML='';gsap.set(box,{autoAlpha:0});return;}
+  box.innerHTML='<span>'+label+'</span>';
+  opts.forEach(o=>{const b=document.createElement('button');b.textContent=o[1];b.dataset.k=o[0];b.setAttribute('aria-pressed',o[0]===cur);
+    b.onclick=()=>{$$('#pick button').forEach(x=>x.setAttribute('aria-pressed',x===b));pickCb&&pickCb(o[0]);};box.appendChild(b);});
+}
+/* probes: two leads, black and red, tip at local 0,0 */
+const probeB=$('#probeB'),probeR=$('#probeR');
+if(probeB){gsap.set([probeB,probeR],{transformOrigin:'0px 0px'});}
+const PD=150;
+const axisV=th=>[-Math.sin(th*Math.PI/180),Math.cos(th*Math.PI/180)];
+function probeAt(el,p){gsap.set(el,{x:p[0],y:p[1],rotation:p[2],autoAlpha:1});}
+function probePark(el,p){const a=axisV(p[2]);gsap.set(el,{x:p[0]+a[0]*PD,y:p[1]+a[1]*PD,rotation:p[2],autoAlpha:0});}
+function probeIn(t,el,p,at,d){t.to(el,{x:p[0],y:p[1],rotation:p[2],autoAlpha:1,duration:d||1.1,ease:'power3.out'},at);}
+function probeOut(t,el,p,at){const a=axisV(p[2]);t.to(el,{x:p[0]+a[0]*PD,y:p[1]+a[1]*PD,autoAlpha:0,duration:.6,ease:'power2.in'},at);}
+const pulse=(sels,atTime,t)=>t.fromTo(sels,{scale:1},{scale:1.45,yoyo:true,repeat:1,duration:.17,transformOrigin:'50% 50%',ease:'power2.out'},atTime);
+
+const paperScene=t=>{
+  t.to(['#plateWrap','#meter'],{autoAlpha:0,y:-24,duration:.5,ease:'power2.in'},0);
+  t.set('#verdict',{autoAlpha:1},.5);
+  [0,1,2,3].forEach(r=>{
+    t.fromTo('#verdict [data-row="'+r+'"]',{y:24,autoAlpha:0},{y:0,autoAlpha:1,duration:.5,stagger:.12,ease:'power3.out'},.6+r*.75);
+    if(r<3) t.fromTo('#verdict [data-row="c'+r+'"]',{scaleY:0},{scaleY:1,duration:.3,ease:'none'},.6+r*.75+.45);
+  });
+};
+
+
+const ORDER=['kit','cut','bs','gray','strip','untwist','order','insert','push','crimp','clamp','test','assemble'];
+const TITLES={kit:'The kit',cut:'Cut to length',bs:'Backshell on',gray:'Gray inner on',strip:'Strip the jacket',untwist:'Untwist',order:'T568B order',insert:'Into the connector',push:'Push to the stop',crimp:'Crimp',clamp:'Clamp the gray part',test:'Test the cable',assemble:'Assemble'};
+const THEME_OF={kit:'blue',cut:'blue',bs:'blue',gray:'blue',strip:'blue',untwist:'blue',order:'blue',insert:'blue',push:'blue',crimp:'blue',clamp:'blue',test:'paper',assemble:'blue'};
+const MODELS={full:{key:'full',name:'Full cable',gen:'two ends, then test'},one:{key:'one',name:'One end',gen:'no test yet'}};
+const CAP={
+  kit:m=>'The bulkhead kit has four parts: an orange and black backshell, a gray inner part, a clear RJ45 connector and a silver housing. You also need Cat5e cable, the cut, strip and crimp tool, and a continuity tester.',
+  cut:m=>'Cut the Cat5e cable to the length the job needs.',
+  bs:m=>'Slide the orange and black backshell over the end of the cable first. Push it well back, out of the way.',
+  gray:m=>'Slide the gray inner part over the cable next. It sits between the backshell and the cable end.',
+  strip:m=>'Strip about 1½ inches of the outer jacket. Then cut the thin white string flush with the stripped end of the jacket.',
+  untwist:m=>'Untwist the four twisted pairs and straighten every wire. Straight wires are what let you set the order.',
+  order:m=>'Line the wires up in T568B order, using the T568B colour guide on the crimp tool. Top to bottom: white-orange, orange, white-green, blue, white-blue, green, white-brown, brown.',
+  insert:m=>'Hold the clear connector so it can plug into the crimp tool, and push the wires into it. When the wires come out the end, check they are still in order.',
+  push:m=>'Push the connector down the wires as far as it will go.',
+  crimp:m=>'Push the clear connector into the crimp tool until it clicks. Squeeze the ratchet a few times: it crimps the connector and trims the wires flush.',
+  clamp:m=>'Clamp the gray part onto the end of the clear connector. Make sure the connector clip is clamped down.',
+  test:m=>m.key==='full'?'Building a full cable? Once the second connector is on, check it with the continuity tester. Every number should match, and it should say Pass.':'Building only one end? There is nothing to test yet. Do this step once the second connector is on.',
+  assemble:m=>'Push the backshell up to the clear connector. Push the clear connector through the silver housing, then screw the pieces together.'
+};
+const S={ord:'B',tst:'pass'};
+const AXY=140;
+const CODES={wo:{c:'#FF8A1F',s:1,n:'white-orange'},o:{c:'#FF8A1F',s:0,n:'orange'},wg:{c:'#1FA34A',s:1,n:'white-green'},g:{c:'#1FA34A',s:0,n:'green'},wb:{c:'#2F5BFF',s:1,n:'white-blue'},b:{c:'#2F5BFF',s:0,n:'blue'},wbr:{c:'#8a4f1f',s:1,n:'white-brown'},br:{c:'#8a4f1f',s:0,n:'brown'}};
+const ORD={B:['wo','o','wg','b','wb','g','wbr','br'],A:['wg','g','wo','b','wb','o','wbr','br']};
+const JUMB=['o','wo','br','wbr','g','wg','b','wb'];
+const PAIR={wo:-22,o:-22,wg:-7.5,g:-7.5,wb:7.5,b:7.5,wbr:22,br:22};
+const WS={u:0,o:0,len:560};
+const slotY=s=>AXY+(s-3.5)*5;
+const wiresG=$('#wiresG');
+const wEl={};
+Object.keys(CODES).forEach(k=>{
+  const g=mk('g',{},wiresG); const c=CODES[k];
+  const out=mk('path',{fill:'none',stroke:'#15161a','stroke-width':6.4,'stroke-linecap':'round'},g);
+  const base=mk('path',{fill:'none',stroke:c.s?'#F4F6FF':c.c,'stroke-width':4,'stroke-linecap':'round'},g);
+  const st=c.s?mk('path',{fill:'none',stroke:c.c,'stroke-width':4,'stroke-dasharray':'5 5'},g):null;
+  wEl[k]={out,base,st,g};
+});
+const ez=s=>{s=Math.max(0,Math.min(1,s));return s*s*(3-2*s);};
+function drawWires(){
+  const ord=ORD[S.ord];
+  Object.keys(CODES).forEach(k=>{
+    const sj=JUMB.indexOf(k), so=ord.indexOf(k);
+    const yB=slotY(sj)+(slotY(so)-slotY(sj))*WS.o;
+    const yP=AXY+PAIR[k];
+    const sign=(k.length>1&&k!=='br')||k==='wbr'?1:-1;
+    const tgt=yP+(yB-yP)*WS.u;
+    let d='';
+    for(let x=470;x<=WS.len;x+=3){
+      const e=ez((x-470)/26);
+      let y=AXY+(tgt-AXY)*e + (1-WS.u)*3.4*Math.sin((x-470)*.42+(sign>0?0:Math.PI))*e;
+      d+=(x===470?'M':'L')+x+' '+y.toFixed(1);
+    }
+    wEl[k].out.setAttribute('d',d); wEl[k].base.setAttribute('d',d); if(wEl[k].st)wEl[k].st.setAttribute('d',d);
+  });
+}
+function wireLabels(show){
+  const g=$('#wlab'); g.innerHTML=''; if(!show)return;
+  const ord=ORD[S.ord];
+  ord.forEach((k,i)=>{const y=slotY(i), ly=AXY+(i-3.5)*18;
+    mk('path',{d:'M566 '+y+' L590 '+ly,stroke:'currentColor','stroke-width':1.5,opacity:.7,fill:'none'},g);
+    const t=mk('text',{x:596,y:ly+4,'font-size':12.5,'font-weight':800,fill:'currentColor',class:'ar'},g); t.textContent=(i+1)+'  '+CODES[k].n;});
+}
+(function(){const p=$('#pins');for(let i=0;i<8;i++){mk('rect',{x:56,y:slotY(i)-AXY-1.6,width:12,height:3.2,rx:.8},p);}})();
+const PARK={bs:[60,262],gr:[190,262],cc:[270,262],hs:[380,262]};
+const at=(id,x,y)=>gsap.set(id,{x,y});
+/* tester display */
+function showTest(k,anim){
+  const rows=$('#tRows'); rows.innerHTML='';
+  const n1=[1,2,3,4,5,6,7,8], n2=k==='swap'?[1,2,6,4,5,3,7,8]:(k==='open'?[1,2,3,4,5,null,7,8]:n1);
+  [n1,n2].forEach((r,j)=>r.forEach((v,i)=>{const t=mk('text',{x:72+i*14.5,y:90+j*24,'font-size':16},rows);t.textContent=v==null?'_':v;if(j&&v!==n1[i])t.setAttribute('fill','#C81E24');}));
+  $('#tRes').textContent=k==='pass'?'Pass':'Fail';
+}
+function ring(t,x,y,w,h,atT){
+  const o=(x+w/2)+' '+(y+h/2);
+  t.call(()=>{['#ringO','#ringI'].forEach(s=>{const e=$(s);e.setAttribute('x',x);e.setAttribute('y',y);e.setAttribute('width',w);e.setAttribute('height',h);});},null,atT);
+  t.fromTo('#rings',{autoAlpha:0,scale:1,svgOrigin:o},{autoAlpha:1,scale:1,svgOrigin:o,duration:.35,ease:'back.out(2)'},atT+.02);
+  if(!reduce) t.fromTo('#rings',{scale:1,svgOrigin:o},{scale:1.08,svgOrigin:o,duration:.22,yoyo:true,repeat:5,ease:'sine.inOut'},atT+.45);
+}
+const CHK={
+  kit:['Backshell, gray inner, clear connector, silver housing','Cat5e cable','Cut, strip and crimp tool','Continuity tester'],
+  cut:['Cable cut to the length the job needs'],
+  bs:['Backshell slid on first','Pushed back out of the way'],
+  gray:['Gray inner slid on next','Behind the cable end, ahead of the backshell'],
+  strip:['About 1½ in of outer jacket stripped','Thin white string cut flush with the jacket'],
+  untwist:['Four pairs untwisted','Every wire straight'],
+  order:['T568B, using the guide on the crimp tool','Pin 1 white-orange to pin 8 brown'],
+  insert:['Wires pushed into the clear connector','Wires out the end, order checked'],
+  push:['Connector pushed down the wires as far as it goes'],
+  crimp:['Connector in the tool until it clicks','Ratchet closed a few times','Wires trimmed flush'],
+  clamp:['Gray part clamped on','Connector clip clamped down'],
+  assemble:['Backshell up to the clear connector','Clear connector through the silver housing','Pieces screwed together']
+};
+const MOD={ORDER,TITLES,THEME_OF,CAP,MODELS,model:MODELS.full,SLIDER:[],
+  init(){},
+  kill(){gsap.killTweensOf([WS,'#work','#test','#bs','#gr','#cc','#hs','#jaws','#jawT','#jawB','#offcut','#cutter','#blA','#blB','#ruler','#stringL','#jacket','#face','#tray','#clips','#rings']);},
+  prep(id){
+    const pos=ORDER.indexOf(id), m=MOD.model;
+    document.body.classList.add('nog');
+    gsap.set('#rings',{autoAlpha:0}); $('#outcome').textContent='';
+    const isTest=id==='test';
+    gsap.set('#work',{autoAlpha:isTest?0:1}); gsap.set('#test',{autoAlpha:isTest?1:0});
+    gsap.set(['#tray','#kitTools'],{autoAlpha:id==='kit'?1:(pos<=2?1:0)}); gsap.set('#kitTools',{autoAlpha:id==='kit'?1:0});
+    /* cable */
+    const cutDone=pos>=2, stripped=pos>=5;
+    gsap.set('#offcut',{autoAlpha:cutDone?0:1,y:0}); gsap.set('#ocR',{attr:{width:cutDone?0:152}});
+    $('#jacket').setAttribute('width',(stripped?470:560)+30); gsap.set('#jacket',{autoAlpha:1});
+    gsap.set('#cutter',{autoAlpha:0}); gsap.set('#blA,#blB',{y:0});
+    gsap.set('#stringL',{opacity:pos===4?1:0}); $('#stringL').setAttribute('d','M470 140 H'+(pos>=5?470:575));
+    gsap.set('#ruler',{autoAlpha:0});
+    gsap.set('#cabLbl',{autoAlpha:pos<=2?1:0});
+    /* parts */
+    gsap.set(['#bs','#gr','#cc','#hs'],{autoAlpha:1});
+    if(pos>=3) at('#bs',110,AXY); else at('#bs',PARK.bs[0],PARK.bs[1]);
+    if(pos>=4) at('#gr',pos>=11?432:230,AXY); else at('#gr',PARK.gr[0],PARK.gr[1]);
+    if(pos>=8) at('#cc',pos>=9?440:480,AXY); else at('#cc',PARK.cc[0],PARK.cc[1]);
+    at('#hs',PARK.hs[0],PARK.hs[1]);
+    gsap.set('#clip',{y:pos>=11?4:0});
+    gsap.set('#jaws',{autoAlpha:0}); gsap.set('#jawT,#jawB',{y:0}); gsap.set('#face',{autoAlpha:0}); $('#clips').innerHTML='';
+    /* wires */
+    WS.u=pos>=6?1:0; WS.o=pos>=7?1:0; WS.len=pos>=10?510:560; if(S.ord==='A'&&id!=='order')S.ord='B';
+    drawWires(); gsap.set('#wiresG',{autoAlpha:stripped?1:0});
+    wireLabels(id==='order'||id==='insert');
+    gsap.set('#wlab',{autoAlpha:0});
+    if(CHK[id]) setChecks(CHK[id]);
+    if(id==='order'){ setPick('Colour guide',[['B','T568B (SOP)'],['A','T568A']],S.ord,v=>{S.ord=v;go(cur);}); gsap.set('#pick',{autoAlpha:0}); }
+    if(id==='test'){ showTest(S.tst);
+      setChecks(m.key==='full'?['Second connector built','Tester on one end, remote on the other','Every number matches: Pass']:['Needs a second connector first','Do this once both ends are built']);
+      if(m.key==='full'){ setPick('Example result',[['pass','Pass'],['swap','Order differs'],['open','Open wire']],S.tst,v=>{S.tst=v;go(cur);}); gsap.set('#pick',{autoAlpha:0}); } }
+  },
+  scenes:{
+    kit(t){
+      ['#bs','#gr','#cc','#hs'].forEach((s,i)=>t.fromTo(s,{autoAlpha:0,y:PARK[['bs','gr','cc','hs'][i]][1]+30},{autoAlpha:1,y:PARK[['bs','gr','cc','hs'][i]][1],duration:.6,ease:'power3.out'},.2+i*.2));
+      t.fromTo('#kitTools',{autoAlpha:0},{autoAlpha:1,duration:.5},1.2);
+      [0,1,2,3].forEach(i=>t.call(()=>check(i,'ok'),null,.8+i*.5));
+    },
+    cut(t){
+      t.fromTo('#cutter',{autoAlpha:0},{autoAlpha:1,duration:.4},.4);
+      t.to('#blA',{y:40,duration:.6,ease:'power2.in'},1.1); t.to('#blB',{y:-40,duration:.6,ease:'power2.in'},1.1);
+      t.to('#offcut',{y:70,autoAlpha:0,duration:.8,ease:'power2.in'},1.7);
+      t.to('#cutter',{autoAlpha:0,duration:.3},2.2);
+      t.call(()=>{check(0,'ok');setTag('Cut square, to length');},null,2.0);
+    },
+    bs(t){
+      t.fromTo('#bs',{autoAlpha:1},{x:640,y:AXY,duration:.9,ease:'power2.inOut'},.3);
+      t.to('#bs',{x:110,duration:1.1,ease:'power2.inOut'},1.3);
+      t.call(()=>check(0,'ok'),null,1.6); t.call(()=>{check(1,'ok');setTag('Orange end toward the cable');},null,2.5);
+    },
+    gray(t){
+      t.to('#gr',{x:640,y:AXY,duration:.9,ease:'power2.inOut'},.3);
+      t.to('#gr',{x:230,duration:1.1,ease:'power2.inOut'},1.3);
+      t.call(()=>check(0,'ok'),null,1.6); t.call(()=>{check(1,'ok');setTag('Both parts parked on the cable');},null,2.5);
+    },
+    strip(t){
+      t.fromTo('#ruler',{autoAlpha:0},{autoAlpha:1,duration:.4},.3);
+      t.fromTo('#wiresG',{autoAlpha:0},{autoAlpha:1,duration:.1},1.3);
+      t.fromTo('#stringL',{opacity:0},{opacity:1,duration:.1},1.3);
+      t.to('#jacket',{attr:{width:500},duration:.6,ease:'power2.inOut'},1.3);
+      t.call(()=>check(0,'ok'),null,1.9);
+      t.to('#stringL',{attr:{d:'M470 140 H470'},duration:.7,ease:'power2.inOut'},2.4);
+      t.call(()=>{check(1,'ok');setTag('String cut flush');},null,3.1);
+      t.to('#ruler',{autoAlpha:0,duration:.4},3.4);
+    },
+    untwist(t){
+      t.to(WS,{u:1,duration:1.8,ease:'power2.inOut',onUpdate:drawWires},.5);
+      t.call(()=>check(0,'ok'),null,1.6); t.call(()=>{check(1,'ok');setTag('Straight, in no order yet');},null,2.4);
+    },
+    order(t){
+      const lab=$('#wlab');
+      t.to(WS,{o:1,duration:1.8,ease:'power2.inOut',onUpdate:drawWires},.4);
+      t.fromTo('#wlab',{autoAlpha:0},{autoAlpha:1,duration:.5},2.2);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.6);
+      t.call(()=>{
+        const b=S.ord==='B'; check(0,b?'ok':'bad'); check(1,b?'ok':'bad');
+        $('#outcome').textContent=b?'T568B: pin 1 white-orange through pin 8 brown.':'That is T568A: the orange and green pairs swap places. The SOP calls for T568B.';
+        setTag(b?'T568B':'T568A: not what the SOP wants');
+      },null,2.6);
+    },
+    insert(t){
+      t.fromTo('#wlab',{autoAlpha:0},{autoAlpha:1,duration:.3},.2);
+      t.fromTo('#cc',{autoAlpha:1},{x:640,y:AXY,duration:.9,ease:'power2.inOut'},.3);
+      t.to('#cc',{x:480,duration:1.1,ease:'power2.inOut'},1.3);
+      t.call(()=>check(0,'ok'),null,2.2);
+      ring(t,566,AXY-26,26,52,2.4); t.call(()=>{check(1,'ok');setTag('Same order out the end');},null,3.0);
+    },
+    push(t){
+      t.to('#cc',{x:440,duration:1.0,ease:'power3.out'},.4);
+      t.call(()=>{check(0,'ok');setTag('Seated against the jacket');},null,1.5);
+    },
+    crimp(t){
+      t.set('#jaws',{autoAlpha:1},.2);
+      t.fromTo('#jawT',{y:-40},{y:0,duration:.6,ease:'power2.out'},.2); t.fromTo('#jawB',{y:40},{y:0,duration:.6,ease:'power2.out'},.2);
+      t.call(()=>{check(0,'ok');setTag('Click');},null,1.0);
+      for(let i=0;i<3;i++){ t.to('#jawT',{y:26,duration:.22,yoyo:true,repeat:1,ease:'power1.inOut'},1.2+i*.55); t.to('#jawB',{y:-26,duration:.22,yoyo:true,repeat:1,ease:'power1.inOut'},1.2+i*.55); }
+      t.call(()=>check(1,'ok'),null,2.8);
+      t.to(WS,{len:510,duration:.3,ease:'none',onUpdate:drawWires},3.0);
+      t.call(()=>{const g=$('#clips');g.innerHTML='';ORD.B.forEach((k,i)=>mk('rect',{x:516+i*4,y:slotY(i)-1.6,width:16,height:3.2,rx:1,fill:CODES[k].c,class:'cl'},g));},null,3.0);
+      t.fromTo('#clips .cl',{y:0,autoAlpha:1},{y:60,autoAlpha:0,duration:.7,ease:'power2.in',stagger:.03},3.05);
+      t.call(()=>{check(2,'ok');setTag('Wires trimmed flush');},null,3.5);
+      t.to('#jaws',{autoAlpha:0,duration:.4},3.8);
+    },
+    clamp(t){
+      t.to('#gr',{x:432,duration:1.0,ease:'power2.inOut'},.4);
+      t.to('#clip',{y:4,duration:.15,yoyo:true,repeat:1},1.5);
+      t.call(()=>check(0,'ok'),null,1.5); t.call(()=>{check(1,'ok');setTag('Clip clamped down');},null,2.2);
+    },
+    test(t){
+      const m=MOD.model;
+      t.fromTo('#test',{autoAlpha:0},{autoAlpha:1,duration:.4},.2);
+      if(m.key!=='full'){ t.call(()=>{$('#outcome').textContent='Skip this step until the second connector is built.';setTag('Not yet');},null,.8); return; }
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.6);
+      t.fromTo('#tRows',{opacity:0},{opacity:0,duration:0},0); t.fromTo('#tRes',{opacity:0},{opacity:0,duration:0},0);
+      t.call(()=>check(0,'ok'),null,.8); t.call(()=>check(1,'ok'),null,1.4);
+      t.to('#tBtn',{scale:.85,transformOrigin:'50% 50%',duration:.15,yoyo:true,repeat:1},1.8);
+      t.to(['#tRows','#tRes'],{opacity:1,duration:.3},2.1);
+      t.call(()=>{const k=S.tst; check(2,k==='pass'?'ok':'bad');
+        $('#outcome').textContent=({pass:'Pass: the wires are in the same position at both ends, so both connectors were assembled the same way.',swap:'The numbers do not match between the rows: the two ends are not wired the same. Redo the end that is wrong.',open:'A number is missing: a wire is not making contact at one end. Redo that end.'})[k];
+        setTag(k==='pass'?'Pass':'Fail');},null,2.3);
+    },
+    assemble(t){
+      t.to('#bs',{x:354,duration:1.0,ease:'power2.inOut'},.3); t.call(()=>check(0,'ok'),null,1.2);
+      t.fromTo('#hs',{autoAlpha:1},{x:640,y:AXY,duration:.9,ease:'power2.inOut'},1.4);
+      t.to('#hs',{x:430,duration:1.1,ease:'power2.inOut'},2.4);
+      t.call(()=>check(1,'ok'),null,3.2);
+      t.fromTo('#face',{autoAlpha:0,y:10},{autoAlpha:1,y:0,duration:.5},3.6);
+      t.call(()=>{check(2,'ok');setTag('Screw it together');},null,4.2);
+    }
+  }
+};
+
+/* ---------- player ---------- */
+let steps=MOD.ORDER.slice(), cur=0, tl=null, auto=false, autoCall=null;
+function renderChips(){
+  const box=$('#models'); box.innerHTML='';
+  if(!MOD.MODELS){return;}
+  Object.values(MOD.MODELS).forEach(m=>{
+    const b=document.createElement('button'); b.className='chip'; b.setAttribute('aria-pressed',m===MOD.model);
+    b.innerHTML='<b>'+m.name+'</b><small>'+m.gen+'</small>'; b.onclick=()=>{MOD.model=m;renderChips();go(cur);}; box.appendChild(b);
+  });
+}
+function renderRail(){
+  const ol=$('#rail ol'); ol.innerHTML='';
+  steps.forEach((id,i)=>{
+    const li=document.createElement('li'); const b=document.createElement('button');
+    b.className=i===cur?'on':''; if(i===cur)b.setAttribute('aria-current','step');
+    b.innerHTML='<span class="n">'+(i+1)+'</span><span class="t">'+MOD.TITLES[id]+'</span>'; b.onclick=()=>go(i);
+    li.appendChild(b); ol.appendChild(li);
+  });
+}
+const cap=$('#cap');
+function caption(t,text){
+  cap.innerHTML='';
+  text.split(' ').forEach((w,i,a)=>{const s=document.createElement('span');s.className='w';s.textContent=w+(i<a.length-1?' ':'');cap.appendChild(s);});
+  t.fromTo(cap.children,{y:16,autoAlpha:0},{y:0,autoAlpha:1,duration:.4,stagger:.03,ease:'power2.out'},.2);
+}
+function setBtns(){ $('#bBack').disabled=cur===0; $('#bNext').textContent=cur===steps.length-1?'Restart':'Next'; }
+function done(id){
+  slider.disabled=!(MOD.SLIDER||[]).includes(id);
+  if(MOD.done)MOD.done(id);
+  if(autoCall){autoCall.kill();autoCall=null;}
+  if(auto&&cur<steps.length-1) autoCall=gsap.delayedCall(2.8,()=>go(cur+1));
+}
+function baseReset(){
+  gsap.set(['#plateWrap','#meter'],{autoAlpha:1,x:0,y:0});
+  gsap.set('#verdict',{autoAlpha:0});
+  gsap.set('#live',{autoAlpha:0,y:0});
+  gsap.set('#tag',{autoAlpha:0,y:0});
+  slider.disabled=true; gsap.killTweensOf(P);
+  if(probeB){probePark(probeB,[0,0,0]);probePark(probeR,[0,0,0]);}
+  configureGauge(...(MOD.gaugeCfg?MOD.gaugeCfg():[0,1,2,1,'V DC'])); render(null);
+  setPick('',null); setChecks([]);
+}
+function go(i){
+  i=Math.max(0,Math.min(steps.length-1,i));
+  if(tl)tl.kill(); if(autoCall){autoCall.kill();autoCall=null;}
+  gsap.killTweensOf(['#tag']);
+  if(MOD.kill)MOD.kill();
+  cur=i; const id=steps[i];
+  renderRail(); baseReset(); MOD.prep(id);
+  tl=gsap.timeline({onComplete:()=>done(id)});
+  themeTween(tl,MOD.THEME_OF[id],0);
+  caption(tl,MOD.CAP[id](MOD.model));
+  MOD.scenes[id](tl);
+  setBtns();
+  if(reduce) tl.progress(1);
+}
+$('#bNext').onclick=()=>go(cur===steps.length-1?0:cur+1);
+$('#bBack').onclick=()=>go(cur-1);
+$('#bReplay').onclick=()=>go(cur);
+$('#bAuto').onclick=function(){
+  auto=!auto; this.setAttribute('aria-pressed',auto);
+  if(auto&&tl&&!tl.isActive()&&cur<steps.length-1&&!autoCall) autoCall=gsap.delayedCall(1.2,()=>go(cur+1));
+  if(!auto&&autoCall){autoCall.kill();autoCall=null;}
+};
+document.addEventListener('keydown',e=>{
+  if(e.target&&e.target.type==='range')return;
+  if(e.key==='ArrowRight')go(cur+1); else if(e.key==='ArrowLeft')go(cur-1); else if(e.key==='r'||e.key==='R')go(cur);
+});
+if(MOD.init)MOD.init();
+renderChips(); go(0);
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Testing the i5A receive card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --panel:#F4F5F8; --panel-ink:#14161C; --pass:#0B8F4D; --fail:#C81E24;
+  --bg:#2336D8; --fg:#F4F6FF;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+}
+:root[data-theme="dark"]{ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+
+*,*::before,*::after{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid currentColor;outline-offset:3px}
+
+#app{min-height:100%;display:grid;grid-template-columns:minmax(0,1fr);gap:18px 28px;padding:18px clamp(14px,3vw,36px) 22px}
+@media (min-width:900px){
+  #app{height:100%;grid-template-columns:190px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+  header,footer{grid-column:1 / -1}
+}
+
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+h1{margin:0;font-family:Archivo,"Helvetica Neue",Arial,sans-serif;font-weight:800;font-stretch:112%;font-size:clamp(20px,2.4vw,28px);letter-spacing:-.01em}
+#models{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;flex-direction:column;align-items:flex-start;border:2px solid currentColor;background:transparent;border-radius:14px;padding:6px 14px;min-height:44px;line-height:1.15;transition:background-color .2s,color .2s}
+.chip b{font-family:Archivo,sans-serif;font-weight:800;font-size:15px}
+.chip small{font-size:12px;opacity:.85}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+#rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+#rail button{display:flex;align-items:baseline;gap:12px;width:100%;text-align:left;background:none;border:0;border-left:5px solid transparent;padding:9px 0 9px 12px;opacity:.5;transition:opacity .2s}
+#rail button:hover{opacity:.85}
+#rail button.on{opacity:1;border-left-color:currentColor}
+#rail .n{font-family:Archivo,sans-serif;font-weight:800;font-size:22px;min-width:1.1em}
+#rail .t{font-size:16px;font-weight:700}
+@media (max-width:899px){
+  #rail ol{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px}
+  #rail button{border-left:0;border-bottom:4px solid transparent;padding:6px 10px;white-space:nowrap;width:auto}
+  #rail button.on{border-bottom-color:currentColor}
+}
+
+#stage{position:relative;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:center}
+@media (min-width:900px){ #stage{grid-template-columns:minmax(0,1fr) 350px} }
+#plateWrap{min-height:0;height:100%;display:flex;align-items:center;justify-content:center}
+#plateWrap svg{width:100%;height:auto;max-height:100%;overflow:hidden}
+svg text{font-family:"Atkinson Hyperlegible",system-ui,sans-serif}
+.ar{font-family:Archivo,"Helvetica Neue",Arial,sans-serif !important}
+
+/* instrument panel */
+#meter{background:var(--panel);color:var(--panel-ink);border:3px solid var(--panel-ink);border-radius:22px;padding:16px 18px 18px;display:flex;flex-direction:column;gap:10px}
+.mode{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{display:inline-block;border:2px solid var(--panel-ink);border-radius:999px;font-weight:700;font-size:14px;padding:5px 12px;background:var(--panel-ink);color:var(--panel)}
+.note{font-size:13px;opacity:.7}
+.read{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-height:1em}
+#num{font-family:Archivo,sans-serif;font-weight:800;font-stretch:105%;font-size:clamp(56px,6vw,84px);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+#unit{font-family:Archivo,sans-serif;font-weight:700;font-size:26px}
+#status{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:16px;color:var(--panel-ink)}
+#status::before{content:"";width:12px;height:12px;border-radius:50%;background:currentColor;opacity:.35}
+#meter[data-state="pass"] #status{color:var(--pass)}
+#meter[data-state="pass"] #status::before{opacity:1}
+#meter[data-state="fail"] #status{color:var(--fail)}
+#meter[data-state="fail"] #status::before{opacity:1}
+.gauge{position:relative;height:78px;margin:4px 8px 0}
+.gauge .bar{position:absolute;left:0;right:0;top:27px;height:14px;border-radius:7px;background:color-mix(in srgb,var(--panel-ink) 16%,transparent)}
+#zone{position:absolute;top:23px;height:22px;border-radius:5px;background:var(--pass)}
+#marker{position:absolute;top:7px;width:4px;height:54px;margin-left:-2px;border-radius:2px;background:var(--panel-ink);opacity:0}
+#marker::before{content:"";position:absolute;top:-5px;left:50%;width:12px;height:12px;background:inherit;transform:translateX(-50%) rotate(45deg)}
+#meter[data-state="fail"] #marker{background:var(--fail)}
+.tick{position:absolute;top:54px;transform:translateX(-50%);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+#rule{font-size:14px;opacity:.8}
+.slide{display:flex;flex-direction:column;gap:4px;font-size:13px;opacity:.9}
+.slide input{width:100%;accent-color:var(--panel-ink)}
+.slide input:disabled{opacity:.35}
+
+/* paperwork flow */
+#verdict{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;align-content:center;visibility:hidden;opacity:0}
+.vh{font-family:Archivo,sans-serif;font-weight:800;font-size:clamp(16px,1.8vw,22px);padding:0 4px}
+.vc{border-radius:16px;padding:14px 18px;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(16px,1.7vw,24px);line-height:1.2;color:#fff}
+.vc.pass{background:#0B8F4D}
+.vc.fail{background:#C81E24}
+.vc.merge{grid-column:1 / -1;background:transparent;color:inherit;border:3px solid currentColor}
+.conn{width:4px;height:20px;background:currentColor;margin:0 auto;transform-origin:top center}
+
+footer{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 28px}
+#cap{margin:0;flex:1 1 320px;max-width:62ch;min-height:3.6em;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(20px,2.2vw,30px);line-height:1.18}
+.w{display:inline-block;white-space:pre}
+#ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:2px solid currentColor;background:transparent;border-radius:999px;padding:9px 18px;min-height:44px;font-weight:700;font-size:16px}
+.btn:disabled{opacity:.35;cursor:default}
+.btn.go{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn[aria-pressed="true"]{box-shadow:inset 0 0 0 3px currentColor}
+#num.word{font-size:clamp(34px,3.8vw,50px)}
+#pick{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;font-weight:700}
+#pick button{border:2px solid var(--panel-ink);background:transparent;color:var(--panel-ink);border-radius:999px;padding:4px 12px;min-height:32px}
+#pick button[aria-pressed="true"]{background:var(--panel-ink);color:var(--panel)}
+#outcome{font-size:15px;font-weight:700;min-height:2.6em}
+
+#checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700}
+#checks li{display:flex;gap:10px;align-items:flex-start;opacity:.55}
+#checks .bx{flex:none;width:18px;height:18px;border:2px solid var(--panel-ink);border-radius:5px;margin-top:1px;position:relative}
+#checks li[data-s="now"]{opacity:1}
+#checks li[data-s="ok"]{opacity:1}
+#checks li[data-s="ok"] .bx{background:var(--pass);border-color:var(--pass)}
+#checks li[data-s="ok"] .bx::after{content:"";position:absolute;left:4px;top:0;width:5px;height:10px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+#checks li[data-s="bad"]{opacity:1;color:var(--fail)}
+#checks li[data-s="bad"] .bx{background:var(--fail);border-color:var(--fail)}
+#checks li[data-s="bad"] .bx::after{content:"\00D7";position:absolute;inset:-4px 0 0 0;text-align:center;color:#fff;font-size:17px;line-height:20px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Testing the i5A receive card</h1>
+    <div id="models" role="group" aria-label="Card"></div>
+  </header>
+  <nav id="rail" aria-label="Steps"><ol></ol></nav>
+  <main id="stage">
+    <div id="plateWrap">
+      <svg viewBox="0 0 800 340" role="img" aria-label="i5A receive card with its power supply, PC, module and multimeter probes">
+        <defs><linearGradient id="pcb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#23A064"/><stop offset="1" stop-color="#157046"/></linearGradient>
+<linearGradient id="blk" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2b2e34"/><stop offset="1" stop-color="#14161a"/></linearGradient>
+<linearGradient id="silver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2F4F6"/><stop offset=".5" stop-color="#C5CAD1"/><stop offset="1" stop-color="#8E959E"/></linearGradient>
+<filter id="noise" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="1" seed="7"/><feColorMatrix type="matrix" values="1.6 0 0 0 -.2  1.6 0 0 0 -.2  1.6 0 0 0 -.2  0 0 0 0 1"/></filter>
+          <linearGradient id="fadeG" gradientUnits="userSpaceOnUse" x1="0" y1="300" x2="0" y2="340"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
+          <mask id="fadeM" maskUnits="userSpaceOnUse" x="-200" y="-200" width="1400" height="1000"><rect x="-200" y="-200" width="1400" height="1000" fill="url(#fadeG)"/></mask>
+          <filter id="blur" x="-10%" y="-200%" width="120%" height="500%"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+        
+<g id="lrs">
+  <path d="M60 22 V4" stroke="#14161C" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <text class="ar" x="72" y="14" font-size="13" font-weight="800" fill="currentColor">AC</text>
+  <rect x="20" y="20" width="130" height="100" rx="6" fill="url(#silver)" stroke="#6e747d" stroke-width="2"/>
+  <text id="lrsName" class="ar" x="85" y="62" font-size="15" font-weight="800" fill="#14161C" text-anchor="middle"></text>
+  <text class="ar" x="85" y="82" font-size="11" font-weight="700" fill="#14161C" text-anchor="middle">DC supply</text>
+  <circle id="lrsLed" cx="132" cy="36" r="5" fill="#1b3a28" stroke="#0b3d27"/>
+  <g font-size="10" font-weight="800" fill="#14161C"><text x="128" y="82">+V</text><text x="128" y="106">&#8722;V</text></g>
+</g>
+<g id="pc">
+  <rect x="20" y="140" width="130" height="86" rx="8" fill="#F4F5F8" stroke="#14161C" stroke-width="3"/>
+  <text id="pcName" class="ar" x="85" y="170" font-size="15" font-weight="800" fill="#14161C" text-anchor="middle">PC PRO</text>
+  <text id="pcSub" x="85" y="190" font-size="12" font-weight="700" fill="#14161C" text-anchor="middle">Controller</text>
+  <text id="pcRes" class="ar" x="85" y="212" font-size="13" font-weight="800" fill="#0B8F4D" text-anchor="middle" opacity="0"></text>
+</g>
+<g id="board"></g>
+<g id="wiresP">
+  <g class="pw"><path d="M150 78 H246" fill="none" stroke="#8b919b" stroke-width="13" stroke-linecap="round"/><path d="M150 78 H246" fill="none" stroke="#E02B2B" stroke-width="7" stroke-linecap="round"/></g>
+  <g class="pw"><path d="M150 102 H246" fill="none" stroke="#8b919b" stroke-width="13" stroke-linecap="round"/><path d="M150 102 H246" fill="none" stroke="#111" stroke-width="7" stroke-linecap="round"/></g>
+  <path class="fl" d="M150 78 H246" fill="none" stroke="#FFC800" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 14" opacity="0"/>
+  <path class="fl" d="M150 102 H246" fill="none" stroke="#FFC800" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 14" opacity="0"/>
+  <g id="gap" opacity="0"><rect x="186" y="66" width="22" height="48" fill="currentColor" opacity="0"/><path d="M178 70 L196 90 M196 70 L178 90" stroke="#FF3B30" stroke-width="5" stroke-linecap="round"/></g>
+</g>
+<g id="cables">
+  <path id="cIn" d="M150 150 H234" fill="none" stroke="#6FA8FF" stroke-width="8" stroke-linecap="round"/>
+  <path id="cOut" d="M234 184 H178 V244" fill="none" stroke="#2F3FFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path class="fl2" d="M150 150 H234" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="2 12" opacity="0"/>
+  <text class="ar" x="178" y="262" font-size="12" font-weight="700" fill="currentColor" text-anchor="middle">to next card</text>
+</g>
+<g id="module"></g>
+<g id="ribbons"></g>
+<g id="badges"></g>
+<g id="legend"></g>
+
+        <g mask="url(#fadeM)">
+        <g id="probeB" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#15161a" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#15161a" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        <g id="probeR" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#E02B2B" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#E02B2B" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        </g>
+        <text id="tag" class="ar" x="780" y="322" font-size="20" font-weight="800" fill="currentColor" text-anchor="end" opacity="0"></text>
+        <g id="live" opacity="0">
+          <rect x="18" y="14" width="190" height="36" rx="18" fill="#14130C"/>
+          <circle id="liveDot" cx="40" cy="32" r="7" fill="#FFC800"/>
+          <text id="liveTxt" x="56" y="38" fill="#FFC800" font-size="17" font-weight="700">Mains live</text>
+        </g>
+      </svg>
+    </div>
+    <aside id="meter" data-state="idle" aria-label="Bench readout">
+      <div class="mode"><span class="pill" id="pill">DC volts</span><span class="note">Example readings</span></div>
+      <div class="read"><span id="num">---</span><span id="unit"></span></div>
+      <div id="status" aria-live="polite">Not measuring</div>
+      <div class="gauge" id="gauge" aria-hidden="true">
+        <div class="bar"></div><div id="zone"></div><div id="marker"></div>
+        <span class="tick" id="tickLo"></span><span class="tick" id="tickHi"></span>
+      </div>
+      <div id="rule"></div>
+      <label class="slide">Drag to try other readings
+        <input id="slider" type="range" min="0" max="1" step="0.01" value="0" disabled>
+      </label>
+      <ul id="checks" style="opacity:0;visibility:hidden"></ul>
+      <div id="pick" style="opacity:0;visibility:hidden"></div>
+      <div id="outcome" aria-live="polite"></div>
+    </aside>
+    <div id="verdict">
+      <div class="vh" data-row="0">Yes: working, no fault found</div>
+      <div class="vh" data-row="0">No: faulty</div>
+      <div class="conn" data-row="c0"></div><div class="conn" data-row="c0"></div>
+      <div class="vc pass" data-row="1">Label it NFF on documentation tape, with the ticket number.</div>
+      <div class="vc fail" data-row="1">Note the fault, plus the ticket or sales order number.</div>
+      <div class="conn" data-row="c1"></div><div class="conn" data-row="c1"></div>
+      <div class="vc merge" data-row="2">Record it in iGO under RMA Returned Parts, then on the Zoho Desk ticket. Check Move To is set to the refurbished inventory location. Mark the iGO order complete.</div>
+      <div class="conn" data-row="c2"></div><div class="conn" data-row="c2"></div>
+      <div class="vc pass" data-row="3">Shelve it as a refurbished part.</div>
+      <div class="vc fail" data-row="3">Crate it with the G3 parts going to the manufacturer for warranty replacement.</div>
+    </div>
+  </main>
+  <footer>
+    <p id="cap" aria-live="polite"></p>
+    <div id="ctl">
+      <button class="btn" id="bBack">Back</button>
+      <button class="btn" id="bReplay">Replay step</button>
+      <button class="btn" id="bAuto" aria-pressed="false">Auto-play</button>
+      <button class="btn go" id="bNext">Next</button>
+    </div>
+  </footer>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+const NS='http://www.w3.org/2000/svg';
+const mk=(tag,attrs,parent)=>{const e=document.createElementNS(NS,tag);Object.keys(attrs||{}).forEach(k=>e.setAttribute(k,attrs[k]));if(parent)parent.appendChild(e);return e;};
+const root=document.documentElement;
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const THEMES={blue:{bg:'#2336D8',fg:'#F4F6FF'},yellow:{bg:'#FFC800',fg:'#14130C'},paper:{bg:'#E9ECF3',fg:'#14161C'}};
+let theme={...THEMES.blue};
+const hex=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+const toHex=s=>s.startsWith('#')?s:'#'+s.match(/\d+/g).map(v=>(+v).toString(16).padStart(2,'0')).join('');
+const mix=(a,b,t)=>{const x=hex(toHex(a)),y=hex(toHex(b));return 'rgb('+x.map((v,i)=>Math.round(v+(y[i]-v)*t)).join(',')+')';};
+function applyTheme(){root.style.setProperty('--bg',theme.bg);root.style.setProperty('--fg',theme.fg);}
+function themeTween(t,key,pos){
+  const from={...theme}, to=THEMES[key], p={t:0};
+  t.to(p,{t:1,duration:reduce?0.01:0.7,ease:'power2.inOut',onUpdate(){
+    theme={bg:mix(from.bg,to.bg,p.t),fg:mix(from.fg,to.fg,p.t)}; applyTheme();
+  },onComplete(){theme={...to};applyTheme();}},pos);
+}
+applyTheme();
+
+/* ---------- meter / gauge ---------- */
+const meter=$('#meter'),num=$('#num'),unitEl=$('#unit'),statusEl=$('#status'),zone=$('#zone'),marker=$('#marker'),
+      tickLo=$('#tickLo'),tickHi=$('#tickHi'),rule=$('#rule'),slider=$('#slider');
+const G={lo:0,hi:1,min:0,max:1,dec:1,unit:'V DC'}; const R={v:null}; const P={val:0};
+const pct=v=>Math.max(0,Math.min(100,(v-G.min)/(G.max-G.min)*100));
+const fmt=(v,d)=>v.toFixed(d);
+function configureGauge(lo,hi,dec,tdec,unit){
+  const span=hi-lo;
+  Object.assign(G,{lo,hi,min:lo-span*0.9,max:hi+span*0.9,dec,unit});
+  zone.style.left=pct(lo)+'%'; zone.style.width=(pct(hi)-pct(lo))+'%';
+  tickLo.style.left=pct(lo)+'%'; tickHi.style.left=pct(hi)+'%';
+  tickLo.textContent=fmt(lo,tdec); tickHi.textContent=fmt(hi,tdec);
+  rule.textContent='Pass: '+fmt(lo,tdec)+' to '+fmt(hi,tdec)+' '+unit;
+  slider.min=G.min; slider.max=G.max; slider.step=(G.max-G.min)/300;
+}
+function render(v){
+  R.v=v;
+  if(v==null){num.textContent='---';unitEl.textContent='';meter.dataset.state='idle';statusEl.textContent='Not measuring';marker.style.opacity=0;return;}
+  marker.style.opacity=1; marker.style.left=pct(v)+'%';
+  num.textContent=fmt(v,G.dec); unitEl.textContent=G.unit;
+  const ok=v>=G.lo-1e-9&&v<=G.hi+1e-9;
+  meter.dataset.state=ok?'pass':'fail';
+  statusEl.textContent=ok?'In range':(v<G.lo?'Too low':'Too high');
+  slider.value=v;
+}
+slider.addEventListener('input',()=>{gsap.killTweensOf(P); render(+slider.value); if(typeof MOD!=='undefined'&&MOD.onSlide)MOD.onSlide(+slider.value);});
+
+/* ---------- shared helpers ---------- */
+const setTag=text=>{const e=$('#tag');if(!e)return;e.textContent=text;gsap.fromTo(e,{autoAlpha:0,y:8},{autoAlpha:1,y:0,duration:.35});};
+const drawIn=(t,sel,at,d)=>t.to(sel,{strokeDashoffset:0,duration:d||.6,ease:'power3.out'},at);
+function prepDash(sel,drawn){ $$(sel).forEach(p=>{const L=Math.ceil(p.getTotalLength())+2;p.dataset.len=L;p.style.strokeDasharray=L;p.style.strokeDashoffset=drawn?0:L;}); }
+/* checklist in the panel */
+function setChecks(items){
+  const ul=$('#checks'); ul.innerHTML='';
+  (items||[]).forEach((txt,i)=>{const li=document.createElement('li');li.dataset.s='off';li.innerHTML='<span class="bx"></span><span>'+txt+'</span>';ul.appendChild(li);});
+  gsap.set('#checks',{autoAlpha:(items&&items.length)?1:0});
+}
+function check(i,state){ const li=$$('#checks li')[i]; if(li)li.dataset.s=state; }
+function allChecks(state){ $$('#checks li').forEach(li=>li.dataset.s=state); }
+/* option buttons in the panel */
+let pickCb=null;
+function setPick(label,opts,cur,cb){
+  const box=$('#pick'); pickCb=cb;
+  if(!opts){box.innerHTML='';gsap.set(box,{autoAlpha:0});return;}
+  box.innerHTML='<span>'+label+'</span>';
+  opts.forEach(o=>{const b=document.createElement('button');b.textContent=o[1];b.dataset.k=o[0];b.setAttribute('aria-pressed',o[0]===cur);
+    b.onclick=()=>{$$('#pick button').forEach(x=>x.setAttribute('aria-pressed',x===b));pickCb&&pickCb(o[0]);};box.appendChild(b);});
+}
+/* probes: two leads, black and red, tip at local 0,0 */
+const probeB=$('#probeB'),probeR=$('#probeR');
+if(probeB){gsap.set([probeB,probeR],{transformOrigin:'0px 0px'});}
+const PD=150;
+const axisV=th=>[-Math.sin(th*Math.PI/180),Math.cos(th*Math.PI/180)];
+function probeAt(el,p){gsap.set(el,{x:p[0],y:p[1],rotation:p[2],autoAlpha:1});}
+function probePark(el,p){const a=axisV(p[2]);gsap.set(el,{x:p[0]+a[0]*PD,y:p[1]+a[1]*PD,rotation:p[2],autoAlpha:0});}
+function probeIn(t,el,p,at,d){t.to(el,{x:p[0],y:p[1],rotation:p[2],autoAlpha:1,duration:d||1.1,ease:'power3.out'},at);}
+function probeOut(t,el,p,at){const a=axisV(p[2]);t.to(el,{x:p[0]+a[0]*PD,y:p[1]+a[1]*PD,autoAlpha:0,duration:.6,ease:'power2.in'},at);}
+const pulse=(sels,atTime,t)=>t.fromTo(sels,{scale:1},{scale:1.45,yoyo:true,repeat:1,duration:.17,transformOrigin:'50% 50%',ease:'power2.out'},atTime);
+
+const paperScene=t=>{
+  t.to(['#plateWrap','#meter'],{autoAlpha:0,y:-24,duration:.5,ease:'power2.in'},0);
+  t.set('#verdict',{autoAlpha:1},.5);
+  [0,1,2,3].forEach(r=>{
+    t.fromTo('#verdict [data-row="'+r+'"]',{y:24,autoAlpha:0},{y:0,autoAlpha:1,duration:.5,stagger:.12,ease:'power3.out'},.6+r*.75);
+    if(r<3) t.fromTo('#verdict [data-row="c'+r+'"]',{scaleY:0},{scaleY:1,duration:.3,ease:'none'},.6+r*.75+.45);
+  });
+};
+
+
+const CFG={"id": "i5a", "name": "i5A", "supply": "LRS-350-5", "supplyShort": "LRS-350-5", "nom": 5, "ex": 5.02, "board": "ribbon", "hdr": "long", "crate": "Crate it with the G3 parts going to the manufacturer for warranty replacement.", "aria": "i5A receive card with its power supply, PC, module and multimeter probes", "intro": "The i5A adapts a Gen 3 control system to a Gen 1 EMC and works with several hub cards. Test power first, then data, then find out whether a ribbon or the card itself is at fault.", "know": "Learn the card before you test it. Power comes in on the red and black terminal, data comes in and goes out on the two Ethernet jacks, and the light and test button tell you how it is doing.", "calls": [{"col": "red", "txt": "+VDC (typically brown in Gen 1)", "b": [214, 50], "t": [238, 70]}, {"col": "blk", "txt": "\u2212VDC (typically grey in Gen 1)", "b": [206, 126], "t": [236, 108]}, {"col": "lb", "txt": "Incoming data (Ethernet)", "b": [200, 214], "t": [228, 160]}, {"col": "db", "txt": "Outgoing data (Ethernet)", "b": [214, 240], "t": [230, 192]}, {"col": "st", "txt": "Status light", "b": [310, 100], "t": [286, 124]}, {"col": "tb", "txt": "Black test button, bottom of card", "b": [318, 214], "t": [290, 232]}]};
+const hub=CFG.board==='hub4';
+const MR=hub?[680,70,110,120]:[650,70,135,140];
+const COLS={red:'#E02B2B',blk:'#14161C',lb:'#6FA8FF',db:'#2F3FFF',pk:'#FF4FD0',st:'#35E27A',tb:'#FFFFFF',or:'#FF8A1F',gr:'#14883A',ye:'#FFC800'};
+const ORDER=hub?['intro','know','light','meter','trace','data','test','reseat','paper']:['intro','know','light','meter','trace','data','test','ribbon','paper'];
+const TITLES={intro:'Why test',know:'Know the card',light:'Status light',meter:'Meter power',trace:'No power?',data:'Data check',test:'Test button',ribbon:'Ribbon swap',reseat:'Reseat cables',paper:'Paperwork'};
+const THEME_OF={intro:'blue',know:'blue',light:'yellow',meter:'blue',trace:'yellow',data:'blue',test:'blue',ribbon:'blue',reseat:'blue',paper:'paper'};
+const CAP={
+  intro:m=>m.intro,
+  know:m=>m.know,
+  light:m=>'Power the card and look at the status light on the front. Lit means power is reaching it, so move on to the data. Dark means keep digging.',
+  meter:m=>'Meter DC volts at the card’s power terminal: black probe on negative, red on positive. Anything from 3.3 to 6 V is acceptable, and it should read about '+m.nom+' V from the '+m.supply+'.',
+  trace:m=>'No power? Check the AC feed and the light on the supply first, then the wiring from supply to card: reseat or rewire. Right voltage at the terminal but a dead card means replace the card.',
+  data:m=>'Power good? Check the card through PC PRO and read the configuration back from it to be sure the right file is on it. If it will not show, check the data cable; a known-good cable and still nothing means the Ethernet port is dead.',
+  test:m=>'Unplug the incoming data and press the black test button on the bottom of the card. It cycles red, green, blue, white and patterns. Clean patterns mean the card is configured correctly.',
+  ribbon:m=>'Static or errors on the module? Reseat the affected ribbon. No change? Swap it with the row below at the card: if the fault follows the ribbon, replace the ribbon; if it stays at the same header, replace the card.',
+  reseat:m=>'Still static or errors? Reseat the RJ50 module data cable and the p28 ribbon between card and hub. A loose p28 looks just like a module data fault. If it continues and the card is configured correctly, replace the card.',
+  paper:m=>'Tag it, log it, then send it where it belongs: the shelf if it is good, the manufacturer crate if it is faulty.'
+};
+const S={fault:'ac',data:'seen',rib:'ribbon'};
+const board=$('#board'), modG=$('#module'), ribG=$('#ribbons'), badges=$('#badges'), legend=$('#legend');
+const SCREW={r:[246,78],b:[246,102]};
+const PRB={r:[SCREW.r[0],SCREW.r[1],-165],b:[SCREW.b[0]+2,SCREW.b[1]+2,-75]};
+const LEDP=[284,128], BTNP=[284,238];
+
+function screw(g,x,y){mk('circle',{cx:x,cy:y,r:9,fill:'url(#silver)',stroke:'#4b5058','stroke-width':1.5},g);mk('line',{x1:x-5,y1:y,x2:x+5,y2:y,stroke:'#3c4047','stroke-width':2.4,'stroke-linecap':'round',transform:'rotate(35 '+x+' '+y+')'},g);}
+function rj45(g,x,y,col){mk('rect',{x:x-8,y:y-15,width:46,height:30,rx:2,fill:'url(#silver)',stroke:'#6e747d','stroke-width':1.5},g);mk('rect',{x:x-2,y:y-9,width:30,height:19,rx:2,fill:'#14161a'},g);for(let i=0;i<6;i++)mk('rect',{x:x+1+i*4.3,y:y+3,width:2,height:6,fill:'#C9A227'},g);mk('rect',{x:x-8,y:y-15,width:5,height:30,fill:col,opacity:.9},g);}
+function buildBoard(){
+  board.innerHTML='';
+  const g=mk('g',{},board);
+  if(!hub){
+    mk('rect',{x:250,y:40,width:350,height:230,rx:8,fill:'url(#pcb)',stroke:'#0b3d27','stroke-width':2.5},g);
+    [[262,52],[588,52],[262,258],[588,258]].forEach(h=>mk('circle',{cx:h[0],cy:h[1],r:5,fill:'#e6e8ea',stroke:'#0b3d27'},g));
+    if(CFG.hdr==='long'){
+      [48,244].forEach(y=>{mk('rect',{x:290,y:y,width:270,height:20,fill:'#14161a',stroke:'#000'},g);for(let i=0;i<20;i++)mk('rect',{x:296+i*13,y:y+5,width:6,height:10,fill:'#3a3d44'},g);});
+    } else {
+      for(let i=0;i<8;i++){[50,226].forEach(y=>{mk('rect',{x:288+i*34,y:y,width:26,height:34,rx:2,fill:'#14161a',stroke:'#000',transform:'skewX('+(y<100?-22:22)+')'},g);});}
+    }
+    mk('rect',{x:392,y:120,width:76,height:76,rx:3,fill:'#14161a'},g);
+    mk('rect',{x:488,y:130,width:64,height:40,rx:3,fill:'#14161a'},g);
+    [[330,110],[330,140],[330,170]].forEach(c=>mk('rect',{x:c[0],y:c[1],width:36,height:18,rx:2,fill:'#14161a'},g));
+    // ribbon headers on the right edge
+    [92,132].forEach(y=>{mk('rect',{x:578,y:y-14,width:22,height:28,rx:2,fill:'#14161a',stroke:'#000'},g);});
+  } else {
+    mk('rect',{x:250,y:60,width:140,height:190,rx:8,fill:'url(#pcb)',stroke:'#0b3d27','stroke-width':2.5},g);
+    mk('rect',{x:296,y:120,width:56,height:56,rx:3,fill:'#14161a'},g);
+    mk('rect',{x:300,y:70,width:44,height:20,rx:2,fill:'#14161a'},g);
+    [80,120,160,200].forEach((y,i)=>{mk('rect',{x:372,y:y-12,width:18,height:24,rx:2,fill:'#14161a',stroke:'#000'},g);});
+    mk('rect',{x:450,y:60,width:170,height:190,rx:8,fill:'url(#pcb)',stroke:'#0b3d27','stroke-width':2.5},g);
+    [80,120,160,200].forEach((y,i)=>{mk('rect',{x:450,y:y-12,width:18,height:24,rx:2,fill:'#14161a',stroke:'#000'},g);
+      mk('rect',{x:594,y:y-13,width:30,height:26,rx:2,fill:'#14161a',stroke:'#000'},g);
+      const t=mk('text',{x:576,y:y+5,'font-size':16,'font-weight':800,fill:'#fff','text-anchor':'middle',class:'ar'},g);t.textContent=i+1;
+      const hn=mk('text',{x:381,y:y+5,'font-size':14,'font-weight':800,fill:'#fff','text-anchor':'middle',class:'ar'},g);hn.textContent=i+1;});
+    mk('rect',{x:500,y:120,width:50,height:56,rx:3,fill:'#14161a'},g);
+    const lbl=mk('text',{x:535,y:60+186,'font-size':11,'font-weight':800,fill:'#fff','text-anchor':'middle',class:'ar'},g);lbl.textContent='4-PORT HUB';
+    [80,120,160,200].forEach((y,i)=>{mk('path',{class:'p28',d:'M390 '+y+' H450',fill:'none',stroke:'#FF8A1F','stroke-width':6,'stroke-linecap':'round'},g);});
+  }
+  /* shared: terminal block, rj45 pair, status led, test button */
+  mk('rect',{x:230,y:62,width:34,height:60,rx:3,fill:'url(#blk)'},g);
+  screw(g,SCREW.r[0],SCREW.r[1]); screw(g,SCREW.b[0],SCREW.b[1]);
+  rj45(g,226,150,'#6FA8FF'); rj45(g,226,184,'#2F3FFF');
+  mk('circle',{id:'led',cx:LEDP[0],cy:LEDP[1],r:5,fill:'#143f2a',stroke:'#0b3d27','stroke-width':1.5},g);
+  mk('circle',{id:'btn',cx:BTNP[0],cy:BTNP[1],r:9,fill:'#0b0b0d',stroke:'#C9CDD4','stroke-width':2},g);
+  const tx=mk('text',{x:BTNP[0]+16,y:BTNP[1]+4,'font-size':10,'font-weight':800,fill:'#E8F5EE'},g);tx.textContent='TEST';
+}
+function buildModule(){
+  modG.innerHTML='';
+  const [x,y,w,h]=MR; const g=mk('g',{},modG);
+  mk('rect',{x:x,y:y,width:w,height:h,rx:6,fill:'#0d0e10',stroke:'#C9CDD4','stroke-width':2.5},g);
+  const cols=hub?8:10, rows=hub?8:8;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)mk('circle',{cx:x+10+c*((w-20)/(cols-1)),cy:y+10+r*((h-20)/(rows-1)),r:2.6,fill:'#3a3d44'},g);
+  mk('rect',{id:'lit',x:x+3,y:y+3,width:w-6,height:h-6,rx:4,fill:'#fff',opacity:0},g);
+  mk('rect',{id:'stat',x:x+3,y:y+h/4+1,width:w-6,height:h/4-2,fill:'#888',filter:'url(#noise)',opacity:0},g);
+  const t=mk('text',{x:x+w/2,y:y+h+18,class:'ar','font-size':13,'font-weight':700,fill:'currentColor','text-anchor':'middle'},g);t.textContent='Module';
+}
+const RIBY=hub?{h:[],m:[]}:{h:[92,132],m:[MR[1]+MR[3]/8,MR[1]+MR[3]*3/8]};
+function ribD(y1,y2){return 'M600 '+y1+' C 625 '+y1+' 625 '+y2+' '+MR[0]+' '+y2;}
+function buildRibbons(){
+  ribG.innerHTML='';
+  if(hub){
+    mk('path',{id:'rj50',d:'M624 80 C 650 80 650 '+(MR[1]+30)+' '+MR[0]+' '+(MR[1]+30),fill:'none',stroke:'#FFC800','stroke-width':6,'stroke-linecap':'round'},ribG);
+    return;
+  }
+  [0,1].forEach(i=>{
+    const g=mk('g',{id:'rb'+i},ribG);
+    mk('path',{class:'rbo',d:ribD(RIBY.h[i],RIBY.m[i]),fill:'none',stroke:'#7a7f88','stroke-width':12,'stroke-linecap':'round'},g);
+    mk('path',{class:'rbc',d:ribD(RIBY.h[i],RIBY.m[i]),fill:'none',stroke:i?'#E9ECF3':'#FF4FD0','stroke-width':7,'stroke-linecap':'round'},g);
+  });
+  const t=mk('text',{x:625,y:258,'font-size':13,'font-weight':700,fill:'currentColor','text-anchor':'middle',class:'ar',id:'ribLbl',opacity:0},ribG);
+  const m=mk('g',{id:'mark',opacity:0},ribG);
+  mk('circle',{cx:0,cy:0,r:11,fill:'#FF3B30',stroke:'#fff','stroke-width':2.5},m);
+  mk('path',{d:'M-4.5 -4.5 L4.5 4.5 M4.5 -4.5 L-4.5 4.5',stroke:'#fff','stroke-width':2.5,'stroke-linecap':'round'},m);
+}
+function ribSet(a,b){ /* a,b = card-end y of ribbon 0 and ribbon 1 */
+  [a,b].forEach((y,i)=>{ $$('#rb'+i+' path').forEach(p=>p.setAttribute('d',ribD(y,RIBY.m[i]))); });
+}
+const CALL=CFG.calls;
+function buildCallouts(){
+  badges.innerHTML=''; legend.innerHTML='';
+  CALL.forEach((c,i)=>{
+    const g=mk('g',{class:'bdg b'+i},badges);
+    mk('line',{x1:c.b[0],y1:c.b[1],x2:c.t[0],y2:c.t[1],stroke:COLS[c.col]==='#FFFFFF'?'#fff':COLS[c.col],'stroke-width':3,'stroke-linecap':'round'},g);
+    mk('circle',{cx:c.b[0],cy:c.b[1],r:10,fill:COLS[c.col],stroke:'#fff','stroke-width':2},g);
+    const tx=mk('text',{x:c.b[0],y:c.b[1]+4.5,'font-size':13,'font-weight':800,fill:c.col==='blk'?'#fff':'#14161C','text-anchor':'middle'},g);tx.textContent=i+1;
+    const rows=Math.ceil(CALL.length/2), col=i<rows?0:1, row=i%rows;
+    const lg=mk('g',{class:'lgd l'+i},legend), lx=col?420:40, ly=284+row*16;
+    mk('circle',{cx:lx+8,cy:ly-5,r:8,fill:COLS[c.col],stroke:'#fff','stroke-width':1.5},lg);
+    const nt=mk('text',{x:lx+8,y:ly-1,'font-size':11,'font-weight':800,fill:c.col==='blk'?'#fff':'#14161C','text-anchor':'middle'},lg);nt.textContent=i+1;
+    const lt=mk('text',{x:lx+24,y:ly,'font-size':13,'font-weight':700,fill:'currentColor'},lg);lt.textContent=c.txt;
+  });
+}
+const gaugeCfg=()=>[3.3,6,2,1,'V DC'];
+function setLed(on){ gsap.set('#led',{fill:on?'#35E27A':'#143f2a'}); gsap.set('#lrsLed',{fill:on?'#35E27A':'#1b3a28'}); }
+function flow(on){ gsap.set('.fl',{opacity:on?1:0}); }
+const dashFlow=reduce?null:gsap.to({o:0},{o:-32,duration:1.1,repeat:-1,ease:'none',onUpdate(){const o=this.targets()[0].o;$$('.fl,.fl2').forEach(p=>p.style.strokeDashoffset=o);}});
+function lit(c,a){ gsap.set('#lit',{fill:c,opacity:a}); }
+
+const MOD={ORDER,TITLES,THEME_OF,CAP,model:CFG,gaugeCfg,SLIDER:['meter'],
+  init(){buildBoard();buildModule();buildRibbons();buildCallouts();$('#lrsName').textContent=CFG.supplyShort;},
+  kill(){gsap.killTweensOf(['#lit','#led','#lrsLed','#btn','#stat','#mark','#cIn','#cOut','#gap','#pcRes']);if(MOD._sw)MOD._sw.kill();},
+  prep(id){
+    const pos=ORDER.indexOf(id);
+    gsap.set(['#lrs','#pc','#board','#wiresP','#cables','#module','#ribbons'],{autoAlpha:pos>0?1:0,y:0});
+    gsap.set('.bdg,.lgd',{autoAlpha:0}); gsap.set('#gap',{autoAlpha:0}); gsap.set('#pcRes',{opacity:0});
+    gsap.set('#cIn',{opacity:1}); gsap.set('.fl2',{opacity:0});
+    gsap.set('#stat',{opacity:0}); lit('#fff',0); gsap.set('#mark',{opacity:0}); gsap.set('#ribLbl',{opacity:0});
+    const on=['light','meter','data','test','ribbon','reseat'].includes(id)&&id!=='light';
+    const ledOn=(id==='meter'||id==='data'||id==='test'||id==='ribbon'||id==='reseat');
+    setLed(ledOn); flow(ledOn);
+    gsap.set('#btn',{scale:1,svgOrigin:BTNP[0]+' '+BTNP[1]});
+    gsap.set('.pw',{opacity:1}); $('#outcome').textContent='';
+    if(!hub) ribSet(RIBY.h[0],RIBY.h[1]);
+    if(id==='ribbon'||id==='reseat'||id==='data'||id==='test'){ gsap.set('#stat',{opacity:(id==='ribbon'||id==='reseat')?1:0}); }
+    if(id==='test'){ gsap.set('#cIn',{opacity:1}); }
+    if(id==='meter'){ probePark(probeB,PRB.b); probePark(probeR,PRB.r); }
+    if(id==='trace'){ setChecks(['AC feed on, light on the supply lit','Supply-to-card wiring good: reseat or rewire','Voltage at terminal but card dead: replace card']);
+      setPick('Example fault',[['ac','No AC'],['wire','Loose wire'],['card','Dead card']],S.fault,v=>{S.fault=v;go(cur);}); gsap.set('#pick',{autoAlpha:0});
+      if(S.fault==='ac'){setLed(false);flow(false);} if(S.fault==='wire'){setLed(false);flow(false);} if(S.fault==='card'){setLed(false);flow(true);} }
+    if(id==='data'){ setChecks(['Card visible in PC PRO','Right configuration file read back from card','Data cable from controller or previous card good']);
+      setPick('Example card',[['seen','Visible'],['not','Not visible']],S.data,v=>{S.data=v;go(cur);}); gsap.set('#pick',{autoAlpha:0}); }
+    if(id==='test'){ setChecks(['Red, green, blue and white all show','Patterns are clean']); }
+    if(id==='ribbon'){ setChecks(['Affected ribbon reseated','Swapped with the row below','Fault followed the swap?']);
+      setPick('After the swap',[['ribbon','Follows the ribbon'],['card','Stays at the header']],S.rib,v=>{S.rib=v;go(cur);}); gsap.set('#pick',{autoAlpha:0}); }
+    if(id==='reseat'){ setChecks(['RJ50 module data reseated','p28 ribbon reseated','Card configured correctly, fault remains: replace card']); }
+    if(id==='light'){ setChecks(['Status light on the front of the card is lit']); }
+  },
+  scenes:{
+    intro(t){
+      t.fromTo(['#lrs','#pc','#board','#wiresP','#cables','#module','#ribbons'],{y:40,autoAlpha:0},{y:0,autoAlpha:1,duration:.8,ease:'power3.out',stagger:.06},.2);
+      t.fromTo('#meter',{x:40,autoAlpha:0},{x:0,autoAlpha:1,duration:.7,ease:'power3.out'},.5);
+    },
+    know(t){
+      CALL.forEach((c,i)=>{
+        t.fromTo('.b'+i,{scale:0,autoAlpha:0,svgOrigin:c.b[0]+' '+c.b[1]},{scale:1,autoAlpha:1,duration:.4,ease:'back.out(2.2)'},.4+i*.55);
+        t.fromTo('.l'+i,{x:-10,autoAlpha:0},{x:0,autoAlpha:1,duration:.4},.5+i*.55);
+      });
+    },
+    light(t){
+      t.fromTo('#live',{autoAlpha:0,y:-10},{autoAlpha:1,y:0,duration:.4},.2);
+      t.call(()=>{setLed(false);},null,0);
+      t.call(()=>{gsap.set('#lrsLed',{fill:'#35E27A'});flow(true);setTag('Supply on');},null,.8);
+      t.call(()=>{gsap.set('#led',{fill:'#35E27A'});setTag('Status light lit: power is reaching the card');check(0,'ok');},null,2.0);
+    },
+    meter(t){
+      probeIn(t,probeB,PRB.b,.5); probeIn(t,probeR,PRB.r,.7);
+      t.fromTo(P,{val:0},{val:CFG.ex,duration:1.4,ease:'power3.out',onUpdate:()=>render(P.val)},1.9);
+    },
+    trace(t){
+      t.fromTo('#live',{autoAlpha:0,y:-10},{autoAlpha:1,y:0,duration:.4},.2);
+      t.call(()=>setTag('Dark card. Start at the supply.'),null,.4);
+      if(S.fault==='ac'){
+        t.call(()=>{check(0,'bad');$('#outcome').textContent='No AC at the supply: connect the AC power.';},null,1.6);
+      } else if(S.fault==='wire'){
+        t.call(()=>{gsap.set('#lrsLed',{fill:'#35E27A'});check(0,'ok');},null,1.4);
+        t.fromTo('#gap',{autoAlpha:0},{autoAlpha:1,duration:.3},2.2);
+        t.call(()=>{check(1,'bad');$('#outcome').textContent='Broken or loose supply wiring: reseat or rewire.';},null,2.6);
+      } else {
+        t.call(()=>{gsap.set('#lrsLed',{fill:'#35E27A'});flow(true);check(0,'ok');check(1,'ok');},null,1.4);
+        t.fromTo(P,{val:0},{val:CFG.ex,duration:1,ease:'power3.out',onUpdate:()=>render(P.val)},2.2);
+        t.call(()=>{check(2,'bad');$('#outcome').textContent='Right voltage, no response: replace the card.';},null,3.4);
+      }
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},1.0);
+    },
+    data(t){
+      t.call(()=>flow(true),null,0);
+      t.fromTo('.fl2',{opacity:0},{opacity:1,duration:.3},.4);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.8);
+      t.call(()=>{
+        const ok=S.data==='seen';
+        $('#pcRes').textContent=ok?'Card found':'No card found'; gsap.set('#pcRes',{fill:ok?'#0B8F4D':'#C81E24',opacity:1});
+        check(0,ok?'ok':'bad'); check(1,ok?'ok':'off'); check(2,ok?'ok':'bad');
+        $('#outcome').textContent=ok?'Visible with the right config: data path is good.':'Not visible: check the data cable from the controller or previous card. A known-good cable and still nothing: the Ethernet port is dead, replace.';
+      },null,1.8);
+    },
+    test(t){
+      t.call(()=>flow(true),null,0);
+      t.to('#cIn',{opacity:.15,duration:.4},.5);
+      t.call(()=>setTag('Incoming data unplugged'),null,.6);
+      t.to('#btn',{scale:.8,yoyo:true,repeat:1,duration:.15},1.6);
+      const cols=['#FF2D2D','#2BD45A','#2F6BFF','#FFFFFF','#FF2D2D'];
+      cols.forEach((c,i)=>t.call(()=>lit(c,.85),null,2.0+i*.8));
+      t.call(()=>{lit('#14161C',0);setTag('Then patterns: all clean');check(0,'ok');},null,6.0);
+      t.call(()=>check(1,'ok'),null,6.4);
+    },
+    ribbon(t){
+      t.call(()=>setTag('Static on one row'),null,.4);
+      const p={t:0};
+      t.fromTo('#mark',{opacity:0},{opacity:1,duration:.3},.8);
+      t.call(()=>{gsap.set('#mark',{x:RIBY.h[0]<0?0:588,y:RIBY.h[0]-0});},null,.8);
+      t.call(()=>check(0,'ok'),null,1.2);
+      t.to(p,{t:1,duration:1.2,ease:'power2.inOut',onUpdate(){
+        const a=RIBY.h[0]+(RIBY.h[1]-RIBY.h[0])*p.t, b=RIBY.h[1]+(RIBY.h[0]-RIBY.h[1])*p.t; ribSet(a,b);
+        if(S.rib==='ribbon') gsap.set('#mark',{y:a});
+      }},1.8);
+      t.call(()=>check(1,'ok'),null,3.1);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},3.0);
+      t.call(()=>{ const r=S.rib==='ribbon'; check(2,'ok'); setTag(r?'The fault followed the ribbon':'The fault stayed at the same header');
+        $('#outcome').textContent=r?'Followed the ribbon: replace the ribbon.':'Stayed at the header: replace the receive card.';},null,3.4);
+    },
+    reseat(t){
+      t.call(()=>setTag('Static on the module'),null,.4);
+      t.to('.p28',{opacity:.2,yoyo:true,repeat:3,duration:.3},1.0);
+      t.call(()=>check(1,'ok'),null,2.4);
+      t.to('#rj50',{opacity:.2,yoyo:true,repeat:3,duration:.3},1.2);
+      t.call(()=>check(0,'ok'),null,2.6);
+      t.call(()=>{setTag('A loose p28 can look like a module data fault');check(2,'ok');},null,3.4);
+    },
+    paper:paperScene
+  }
+};
+
+/* ---------- player ---------- */
+let steps=MOD.ORDER.slice(), cur=0, tl=null, auto=false, autoCall=null;
+function renderChips(){
+  const box=$('#models'); box.innerHTML='';
+  if(!MOD.MODELS){return;}
+  Object.values(MOD.MODELS).forEach(m=>{
+    const b=document.createElement('button'); b.className='chip'; b.setAttribute('aria-pressed',m===MOD.model);
+    b.innerHTML='<b>'+m.name+'</b><small>'+m.gen+'</small>'; b.onclick=()=>{MOD.model=m;renderChips();go(cur);}; box.appendChild(b);
+  });
+}
+function renderRail(){
+  const ol=$('#rail ol'); ol.innerHTML='';
+  steps.forEach((id,i)=>{
+    const li=document.createElement('li'); const b=document.createElement('button');
+    b.className=i===cur?'on':''; if(i===cur)b.setAttribute('aria-current','step');
+    b.innerHTML='<span class="n">'+(i+1)+'</span><span class="t">'+MOD.TITLES[id]+'</span>'; b.onclick=()=>go(i);
+    li.appendChild(b); ol.appendChild(li);
+  });
+}
+const cap=$('#cap');
+function caption(t,text){
+  cap.innerHTML='';
+  text.split(' ').forEach((w,i,a)=>{const s=document.createElement('span');s.className='w';s.textContent=w+(i<a.length-1?' ':'');cap.appendChild(s);});
+  t.fromTo(cap.children,{y:16,autoAlpha:0},{y:0,autoAlpha:1,duration:.4,stagger:.03,ease:'power2.out'},.2);
+}
+function setBtns(){ $('#bBack').disabled=cur===0; $('#bNext').textContent=cur===steps.length-1?'Restart':'Next'; }
+function done(id){
+  slider.disabled=!(MOD.SLIDER||[]).includes(id);
+  if(MOD.done)MOD.done(id);
+  if(autoCall){autoCall.kill();autoCall=null;}
+  if(auto&&cur<steps.length-1) autoCall=gsap.delayedCall(2.8,()=>go(cur+1));
+}
+function baseReset(){
+  gsap.set(['#plateWrap','#meter'],{autoAlpha:1,x:0,y:0});
+  gsap.set('#verdict',{autoAlpha:0});
+  gsap.set('#live',{autoAlpha:0,y:0});
+  gsap.set('#tag',{autoAlpha:0,y:0});
+  slider.disabled=true; gsap.killTweensOf(P);
+  if(probeB){probePark(probeB,[0,0,0]);probePark(probeR,[0,0,0]);}
+  configureGauge(...(MOD.gaugeCfg?MOD.gaugeCfg():[0,1,2,1,'V DC'])); render(null);
+  setPick('',null); setChecks([]);
+}
+function go(i){
+  i=Math.max(0,Math.min(steps.length-1,i));
+  if(tl)tl.kill(); if(autoCall){autoCall.kill();autoCall=null;}
+  gsap.killTweensOf(['#tag']);
+  if(MOD.kill)MOD.kill();
+  cur=i; const id=steps[i];
+  renderRail(); baseReset(); MOD.prep(id);
+  tl=gsap.timeline({onComplete:()=>done(id)});
+  themeTween(tl,MOD.THEME_OF[id],0);
+  caption(tl,MOD.CAP[id](MOD.model));
+  MOD.scenes[id](tl);
+  setBtns();
+  if(reduce) tl.progress(1);
+}
+$('#bNext').onclick=()=>go(cur===steps.length-1?0:cur+1);
+$('#bBack').onclick=()=>go(cur-1);
+$('#bReplay').onclick=()=>go(cur);
+$('#bAuto').onclick=function(){
+  auto=!auto; this.setAttribute('aria-pressed',auto);
+  if(auto&&tl&&!tl.isActive()&&cur<steps.length-1&&!autoCall) autoCall=gsap.delayedCall(1.2,()=>go(cur+1));
+  if(!auto&&autoCall){autoCall.kill();autoCall=null;}
+};
+document.addEventListener('keydown',e=>{
+  if(e.target&&e.target.type==='range')return;
+  if(e.key==='ArrowRight')go(cur+1); else if(e.key==='ArrowLeft')go(cur-1); else if(e.key==='r'||e.key==='R')go(cur);
+});
+if(MOD.init)MOD.init();
+renderChips(); go(0);
+
+})();
+</script>
+</body>
+</html>

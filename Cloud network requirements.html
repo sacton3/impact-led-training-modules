@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cloud network requirements</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --panel:#F4F5F8; --panel-ink:#14161C; --pass:#0B8F4D; --fail:#C81E24;
+  --bg:#2336D8; --fg:#F4F6FF;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+}
+:root[data-theme="dark"]{ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+
+*,*::before,*::after{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid currentColor;outline-offset:3px}
+
+#app{min-height:100%;display:grid;grid-template-columns:minmax(0,1fr);gap:18px 28px;padding:18px clamp(14px,3vw,36px) 22px}
+@media (min-width:900px){
+  #app{height:100%;grid-template-columns:190px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+  header,footer{grid-column:1 / -1}
+}
+
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+h1{margin:0;font-family:Archivo,"Helvetica Neue",Arial,sans-serif;font-weight:800;font-stretch:112%;font-size:clamp(20px,2.4vw,28px);letter-spacing:-.01em}
+#models{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;flex-direction:column;align-items:flex-start;border:2px solid currentColor;background:transparent;border-radius:14px;padding:6px 14px;min-height:44px;line-height:1.15;transition:background-color .2s,color .2s}
+.chip b{font-family:Archivo,sans-serif;font-weight:800;font-size:15px}
+.chip small{font-size:12px;opacity:.85}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+#rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+#rail button{display:flex;align-items:baseline;gap:12px;width:100%;text-align:left;background:none;border:0;border-left:5px solid transparent;padding:9px 0 9px 12px;opacity:.5;transition:opacity .2s}
+#rail button:hover{opacity:.85}
+#rail button.on{opacity:1;border-left-color:currentColor}
+#rail .n{font-family:Archivo,sans-serif;font-weight:800;font-size:22px;min-width:1.1em}
+#rail .t{font-size:16px;font-weight:700}
+@media (max-width:899px){
+  #rail ol{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px}
+  #rail button{border-left:0;border-bottom:4px solid transparent;padding:6px 10px;white-space:nowrap;width:auto}
+  #rail button.on{border-bottom-color:currentColor}
+}
+
+#stage{position:relative;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:center}
+@media (min-width:900px){ #stage{grid-template-columns:minmax(0,1fr) 350px} }
+#plateWrap{min-height:0;height:100%;display:flex;align-items:center;justify-content:center}
+#plateWrap svg{width:100%;height:auto;max-height:100%;overflow:hidden}
+svg text{font-family:"Atkinson Hyperlegible",system-ui,sans-serif}
+.ar{font-family:Archivo,"Helvetica Neue",Arial,sans-serif !important}
+
+/* instrument panel */
+#meter{background:var(--panel);color:var(--panel-ink);border:3px solid var(--panel-ink);border-radius:22px;padding:16px 18px 18px;display:flex;flex-direction:column;gap:10px}
+.mode{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{display:inline-block;border:2px solid var(--panel-ink);border-radius:999px;font-weight:700;font-size:14px;padding:5px 12px;background:var(--panel-ink);color:var(--panel)}
+.note{font-size:13px;opacity:.7}
+.read{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-height:1em}
+#num{font-family:Archivo,sans-serif;font-weight:800;font-stretch:105%;font-size:clamp(56px,6vw,84px);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+#unit{font-family:Archivo,sans-serif;font-weight:700;font-size:26px}
+#status{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:16px;color:var(--panel-ink)}
+#status::before{content:"";width:12px;height:12px;border-radius:50%;background:currentColor;opacity:.35}
+#meter[data-state="pass"] #status{color:var(--pass)}
+#meter[data-state="pass"] #status::before{opacity:1}
+#meter[data-state="fail"] #status{color:var(--fail)}
+#meter[data-state="fail"] #status::before{opacity:1}
+.gauge{position:relative;height:78px;margin:4px 8px 0}
+.gauge .bar{position:absolute;left:0;right:0;top:27px;height:14px;border-radius:7px;background:color-mix(in srgb,var(--panel-ink) 16%,transparent)}
+#zone{position:absolute;top:23px;height:22px;border-radius:5px;background:var(--pass)}
+#marker{position:absolute;top:7px;width:4px;height:54px;margin-left:-2px;border-radius:2px;background:var(--panel-ink);opacity:0}
+#marker::before{content:"";position:absolute;top:-5px;left:50%;width:12px;height:12px;background:inherit;transform:translateX(-50%) rotate(45deg)}
+#meter[data-state="fail"] #marker{background:var(--fail)}
+.tick{position:absolute;top:54px;transform:translateX(-50%);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+#rule{font-size:14px;opacity:.8}
+.slide{display:flex;flex-direction:column;gap:4px;font-size:13px;opacity:.9}
+.slide input{width:100%;accent-color:var(--panel-ink)}
+.slide input:disabled{opacity:.35}
+
+/* paperwork flow */
+#verdict{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;align-content:center;visibility:hidden;opacity:0}
+.vh{font-family:Archivo,sans-serif;font-weight:800;font-size:clamp(16px,1.8vw,22px);padding:0 4px}
+.vc{border-radius:16px;padding:14px 18px;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(16px,1.7vw,24px);line-height:1.2;color:#fff}
+.vc.pass{background:#0B8F4D}
+.vc.fail{background:#C81E24}
+.vc.merge{grid-column:1 / -1;background:transparent;color:inherit;border:3px solid currentColor}
+.conn{width:4px;height:20px;background:currentColor;margin:0 auto;transform-origin:top center}
+
+footer{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 28px}
+#cap{margin:0;flex:1 1 320px;max-width:62ch;min-height:3.6em;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(20px,2.2vw,30px);line-height:1.18}
+.w{display:inline-block;white-space:pre}
+#ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:2px solid currentColor;background:transparent;border-radius:999px;padding:9px 18px;min-height:44px;font-weight:700;font-size:16px}
+.btn:disabled{opacity:.35;cursor:default}
+.btn.go{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn[aria-pressed="true"]{box-shadow:inset 0 0 0 3px currentColor}
+#num.word{font-size:clamp(34px,3.8vw,50px)}
+#pick{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;font-weight:700}
+#pick button{border:2px solid var(--panel-ink);background:transparent;color:var(--panel-ink);border-radius:999px;padding:4px 12px;min-height:32px}
+#pick button[aria-pressed="true"]{background:var(--panel-ink);color:var(--panel)}
+#outcome{font-size:15px;font-weight:700;min-height:2.6em}
+
+#checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700}
+#checks li{display:flex;gap:10px;align-items:flex-start;opacity:.55}
+#checks .bx{flex:none;width:18px;height:18px;border:2px solid var(--panel-ink);border-radius:5px;margin-top:1px;position:relative}
+#checks li[data-s="now"]{opacity:1}
+#checks li[data-s="ok"]{opacity:1}
+#checks li[data-s="ok"] .bx{background:var(--pass);border-color:var(--pass)}
+#checks li[data-s="ok"] .bx::after{content:"";position:absolute;left:4px;top:0;width:5px;height:10px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+#checks li[data-s="bad"]{opacity:1;color:var(--fail)}
+#checks li[data-s="bad"] .bx{background:var(--fail);border-color:var(--fail)}
+#checks li[data-s="bad"] .bx::after{content:"\00D7";position:absolute;inset:-4px 0 0 0;text-align:center;color:#fff;font-size:17px;line-height:20px}
+.nog #num,.nog #unit,.nog #status,.nog .gauge,.nog #rule,.nog .slide,.nog .read{display:none}</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Cloud network requirements</h1>
+    <div id="models" role="group" aria-label="Controller family"></div>
+  </header>
+  <nav id="rail" aria-label="Steps"><ol></ol></nav>
+  <main id="stage">
+    <div id="plateWrap">
+      <svg viewBox="0 0 800 340" role="img" aria-label="Sign, firewall with three ports, and the internet addresses it must reach">
+        <defs><linearGradient id="ctlG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5A5FC4"/><stop offset="1" stop-color="#3C4090"/></linearGradient>
+<pattern id="brick" width="24" height="16" patternUnits="userSpaceOnUse"><rect width="24" height="16" fill="#8E3B2E"/><path d="M0 0H24M0 8H24M6 0V8M18 8V16" stroke="#5a2018" stroke-width="2" fill="none"/></pattern>
+          <linearGradient id="fadeG" gradientUnits="userSpaceOnUse" x1="0" y1="330" x2="0" y2="340"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
+          <mask id="fadeM" maskUnits="userSpaceOnUse" x="-200" y="-200" width="1400" height="1000"><rect x="-200" y="-200" width="1400" height="1000" fill="url(#fadeG)"/></mask>
+          <filter id="blur" x="-10%" y="-200%" width="120%" height="500%"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+        
+<g id="net" opacity="0">
+  <g id="ctl"><rect x="24" y="116" width="124" height="96" rx="8" fill="url(#ctlG)" stroke="#1b1f5a" stroke-width="3"/><text class="ar" x="86" y="156" font-size="20" font-weight="900" fill="#fff" text-anchor="middle" id="ctlT">1123</text><text class="ar" x="86" y="180" font-size="13" font-weight="700" fill="#E3E6FF" text-anchor="middle">controller</text>
+    <text class="ar" x="86" y="108" font-size="14" font-weight="800" fill="currentColor" text-anchor="middle">Your sign</text></g>
+  <g id="lanes"></g>
+  <g id="wall"><rect x="352" y="22" width="52" height="296" fill="url(#brick)" stroke="#3a120c" stroke-width="3"/><text class="ar" x="378" y="14" font-size="13" font-weight="800" fill="currentColor" text-anchor="middle">Firewall</text></g>
+  <g id="gates"></g>
+  <g id="pk"></g>
+  <g id="cloud"><path d="M470 300 q-34 0 -34 -34 q0 -28 30 -32 q2 -46 54 -46 q36 0 46 28 q6 -4 14 -4 q40 0 40 36 q0 52 -52 52 Z" fill="none"/>
+    <rect x="450" y="22" width="340" height="296" rx="26" fill="#F4F5F8" stroke="#14161C" stroke-width="3" opacity=".96"/><text class="ar" x="620" y="50" font-size="15" font-weight="800" fill="#14161C" text-anchor="middle">Internet: addresses to allow</text></g>
+  <g id="hosts"></g>
+</g>
+<g id="win" opacity="0"></g>
+<g id="flow" opacity="0"></g>
+<g id="rings" opacity="0"><rect id="ringO" x="0" y="0" width="10" height="10" rx="8" fill="none" stroke="#fff" stroke-width="8"/><rect id="ringI" x="0" y="0" width="10" height="10" rx="8" fill="none" stroke="#14161C" stroke-width="3.5"/></g>
+
+        <g mask="url(#fadeM)">
+        <g id="probeB" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#15161a" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#15161a" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        <g id="probeR" opacity="0">
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#8b919b" stroke-width="8" stroke-linecap="round"/>
+          <line x1="0" y1="96" x2="0" y2="1100" stroke="#E02B2B" stroke-width="3.5" stroke-linecap="round"/>
+          <rect x="-6.5" y="18" width="13" height="84" rx="5" fill="#E02B2B" stroke="#C9CDD4" stroke-width="2"/>
+          <path d="M0 0 L-3 18 L3 18 Z" fill="#EEF0F3" stroke="#6b717b" stroke-width="1"/>
+        </g>
+        </g>
+        <text id="tag" class="ar" x="20" y="334" font-size="20" font-weight="800" fill="currentColor" text-anchor="start" opacity="0"></text>
+        <g id="live" opacity="0">
+          <rect x="18" y="14" width="190" height="36" rx="18" fill="#14130C"/>
+          <circle id="liveDot" cx="40" cy="32" r="7" fill="#FFC800"/>
+          <text id="liveTxt" x="56" y="38" fill="#FFC800" font-size="17" font-weight="700">Mains live</text>
+        </g>
+      </svg>
+    </div>
+    <aside id="meter" data-state="idle" aria-label="Bench readout">
+      <div class="mode"><span class="pill" id="pill">Network check</span><span class="note">Example results</span></div>
+      <div class="read"><span id="num">---</span><span id="unit"></span></div>
+      <div id="status" aria-live="polite">Not measuring</div>
+      <div class="gauge" id="gauge" aria-hidden="true">
+        <div class="bar"></div><div id="zone"></div><div id="marker"></div>
+        <span class="tick" id="tickLo"></span><span class="tick" id="tickHi"></span>
+      </div>
+      <div id="rule"></div>
+      <label class="slide">Drag to try other readings
+        <input id="slider" type="range" min="0" max="1" step="0.01" value="0" disabled>
+      </label>
+      <ul id="checks" style="opacity:0;visibility:hidden"></ul>
+      <div id="pick" style="opacity:0;visibility:hidden"></div>
+      <div id="outcome" aria-live="polite"></div>
+    </aside>
+    <div id="verdict"></div>
+  </main>
+  <footer>
+    <p id="cap" aria-live="polite"></p>
+    <div id="ctl">
+      <button class="btn" id="bBack">Back</button>
+      <button class="btn" id="bReplay">Replay step</button>
+      <button class="btn" id="bAuto" aria-pressed="false">Auto-play</button>
+      <button class="btn go" id="bNext">Next</button>
+    </div>
+  </footer>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+const NS='http://www.w3.org/2000/svg';
+const mk=(tag,attrs,parent)=>{const e=document.createElementNS(NS,tag);Object.keys(attrs||{}).forEach(k=>e.setAttribute(k,attrs[k]));if(parent)parent.appendChild(e);return e;};
+const root=document.documentElement;
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const THEMES={blue:{bg:'#2336D8',fg:'#F4F6FF'},yellow:{bg:'#FFC800',fg:'#14130C'},paper:{bg:'#E9ECF3',fg:'#14161C'}};
+let theme={...THEMES.blue};
+const hex=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+const toHex=s=>s.startsWith('#')?s:'#'+s.match(/\d+/g).map(v=>(+v).toString(16).padStart(2,'0')).join('');
+const mix=(a,b,t)=>{const x=hex(toHex(a)),y=hex(toHex(b));return 'rgb('+x.map((v,i)=>Math.round(v+(y[i]-v)*t)).join(',')+')';};
+function applyTheme(){root.style.setProperty('--bg',theme.bg);root.style.setProperty('--fg',theme.fg);}
+function themeTween(t,key,pos){
+  const from={...theme}, to=THEMES[key], p={t:0};
+  t.to(p,{t:1,duration:reduce?0.01:0.7,ease:'power2.inOut',onUpdate(){
+    theme={bg:mix(from.bg,to.bg,p.t),fg:mix(from.fg,to.fg,p.t)}; applyTheme();
+  },onComplete(){theme={...to};applyTheme();}},pos);
+}
+applyTheme();
+
+/* ---------- meter / gauge ---------- */
+const meter=$('#meter'),num=$('#num'),unitEl=$('#unit'),statusEl=$('#status'),zone=$('#zone'),marker=$('#marker'),
+      tickLo=$('#tickLo'),tickHi=$('#tickHi'),rule=$('#rule'),slider=$('#slider');
+const G={lo:0,hi:1,min:0,max:1,dec:1,unit:'V DC'}; const R={v:null}; const P={val:0};
+const pct=v=>Math.max(0,Math.min(100,(v-G.min)/(G.max-G.min)*100));
+const fmt=(v,d)=>v.toFixed(d);
+function configureGauge(lo,hi,dec,tdec,unit){
+  const span=hi-lo;
+  Object.assign(G,{lo,hi,min:lo-span*0.9,max:hi+span*0.9,dec,unit});
+  zone.style.left=pct(lo)+'%'; zone.style.width=(pct(hi)-pct(lo))+'%';
+  tickLo.style.left=pct(lo)+'%'; tickHi.style.left=pct(hi)+'%';
+  tickLo.textContent=fmt(lo,tdec); tickHi.textContent=fmt(hi,tdec);
+  rule.textContent='Pass: '+fmt(lo,tdec)+' to '+fmt(hi,tdec)+' '+unit;
+  slider.min=G.min; slider.max=G.max; slider.step=(G.max-G.min)/300;
+}
+function render(v){
+  R.v=v;
+  if(v==null){num.textContent='---';unitEl.textContent='';meter.dataset.state='idle';statusEl.textContent='Not measuring';marker.style.opacity=0;return;}
+  marker.style.opacity=1; marker.style.left=pct(v)+'%';
+  num.textContent=fmt(v,G.dec); unitEl.textContent=G.unit;
+  const ok=v>=G.lo-1e-9&&v<=G.hi+1e-9;
+  meter.dataset.state=ok?'pass':'fail';
+  statusEl.textContent=ok?'In range':(v<G.lo?'Too low':'Too high');
+  slider.value=v;
+}
+slider.addEventListener('input',()=>{gsap.killTweensOf(P); render(+slider.value); if(typeof MOD!=='undefined'&&MOD.onSlide)MOD.onSlide(+slider.value);});
+
+/* ---------- shared helpers ---------- */
+const setTag=text=>{const e=$('#tag');if(!e)return;e.textContent=text;gsap.fromTo(e,{autoAlpha:0,y:8},{autoAlpha:1,y:0,duration:.35});};
+const drawIn=(t,sel,at,d)=>t.to(sel,{strokeDashoffset:0,duration:d||.6,ease:'power3.out'},at);
+function prepDash(sel,drawn){ $$(sel).forEach(p=>{const L=Math.ceil(p.getTotalLength())+2;p.dataset.len=L;p.style.strokeDasharray=L;p.style.strokeDashoffset=drawn?0:L;}); }
+/* checklist in the panel */
+function setChecks(items){
+  const ul=$('#checks'); ul.innerHTML='';
+  (items||[]).forEach((txt,i)=>{const li=document.createElement('li');li.dataset.s='off';li.innerHTML='<span class="bx"></span><span>'+txt+'</span>';ul.appendChild(li);});
+  gsap.set('#checks',{autoAlpha:(items&&items.length)?1:0});
+}
+function check(i,state){ const li=$$('#checks li')[i]; if(li)li.dataset.s=state; }
+function allChecks(state){ $$('#checks li').forEach(li=>li.dataset.s=state); }
+/* option buttons in the panel */
+let pickCb=null;
+function setPick(label,opts,cur,cb){
+  const box=$('#pick'); pickCb=cb;
+  if(!opts){box.innerHTML='';gsap.set(box,{autoAlpha:0});return;}
+  box.innerHTML='<span>'+label+'</span>';
+  opts.forEach(o=>{const b=document.createElement('button');b.textContent=o[1];b.dataset.k=o[0];b.setAttribute('aria-pressed',o[0]===cur);
+    b.onclick=()=>{$$('#pick button').forEach(x=>x.setAttribute('aria-pressed',x===b));pickCb&&pickCb(o[0]);};box.appendChild(b);});
+}
+/* probes: two leads, black and red, tip at local 0,0 */
+const probeB=$('#probeB'),probeR=$('#probeR');
+if(probeB){gsap.set([probeB,probeR],{transformOrigin:'0px 0px'});}
+const PD=150;
+const axisV=th=>[-Math.sin(th*Math.PI/180),Math.cos(th*Math.PI/180)];
+function probeAt(el,p){gsap.set(el,{x:p[0],y:p[1],rotation:p[2],autoAlpha:1});}
+function probePark(el,p){const a=axisV(p[2]);gsap.set(el,{x:p[0]+a[0]*PD,y:p[1]+a[1]*PD,rotation:p[2],autoAlpha:0});}
+function probeIn(t,el,p,at,d){t.to(el,{x:p[0],y:p[1],rotation:p[2],autoAlpha:1,duration:d||1.1,ease:'power3.out'},at);}
+function probeOut(t,el,p,at){const a=axisV(p[2]);t.to(el,{x:p[0]+a[0]*PD,y:p[1]+a[1]*PD,autoAlpha:0,duration:.6,ease:'power2.in'},at);}
+const pulse=(sels,atTime,t)=>t.fromTo(sels,{scale:1},{scale:1.45,yoyo:true,repeat:1,duration:.17,transformOrigin:'50% 50%',ease:'power2.out'},atTime);
+
+const paperScene=t=>{
+  t.to(['#plateWrap','#meter'],{autoAlpha:0,y:-24,duration:.5,ease:'power2.in'},0);
+  t.set('#verdict',{autoAlpha:1},.5);
+  [0,1,2,3].forEach(r=>{
+    t.fromTo('#verdict [data-row="'+r+'"]',{y:24,autoAlpha:0},{y:0,autoAlpha:1,duration:.5,stagger:.12,ease:'power3.out'},.6+r*.75);
+    if(r<3) t.fromTo('#verdict [data-row="c'+r+'"]',{scaleY:0},{scaleY:1,duration:.3,ease:'none'},.6+r*.75+.45);
+  });
+};
+
+
+const ORDER=['intro','hosts','ports','test','log','apply','trouble'];
+const TITLES={intro:'What the sign must reach',hosts:'Open the addresses',ports:'Open the ports',test:'Test from a PC',log:'Read the log',apply:'Final test in PC Pro',trouble:'Pick the symptom'};
+const THEME_OF={intro:'blue',hosts:'blue',ports:'blue',test:'blue',log:'blue',apply:'blue',trouble:'paper'};
+const MODELS={
+  cp:{key:'cp',name:'Cloud+ / 1123',gen:'ports 443, 8443, 123',ctl:'1123',
+    hosts:[['access.impactledsigns.com','Cloud address'],['impact.cloudled.com','Cloud address (1123 firewall page)'],['server.cloudled.com','Main server (Cloud+ SOP)'],['weather.cloudled.com','Weather server (Amazon S3)']],
+    ports:[['443','TCP','HTTPS'],['8443','TCP','WebSocket'],['123','UDP','NTP']]},
+  cl:{key:'cl',name:'CloudLED',gen:'older SOP · ports 80, 443, 123',ctl:'Cloud',
+    hosts:[['server.cloudled.com','Main server address'],['203.0.113.10','Server IP (example)'],['s3.amazonaws.com/cloudled_playlist/','Playlist package bucket (Amazon S3)']],
+    ports:[['80','TCP','HTTP'],['443','TCP','HTTPS'],['123','UDP','NTP, break/fix only']]}
+};
+const CAP={
+  intro:m=>'A cloud sign reaches Impact through the customer’s network, so the customer’s firewall has to let it out. It leaves the factory on DHCP, and signs on 4G are plug and play.',
+  hosts:m=>'Open traffic to the cloud addresses through every firewall and filtering system. '+(m.key==='cp'?'Weather content comes from an Amazon S3 address, so open that too.':'Playlist packages come from an Amazon S3 bucket, so open that too.'),
+  ports:m=>m.key==='cp'?'Three ports have to be open: 443 for HTTPS, 8443 for the websocket and 123 for NTP time.':'Open 80 for HTTP and 443 for HTTPS. Open 123 for NTP only for break/fix, when NTP is not working properly.',
+  test:m=>'To test the ports, put a PC on the same network as the controller. Browse to the access address on 443, then on 8443. If either will not respond, the port is being blocked.',
+  log:m=>'Pull the controller’s log and search it for blocking messages about the HTTP connection. Over the LAN use the controller’s own address. Over USB, do not connect to the customer’s network.',
+  apply:m=>'Last, the final test. In PC Pro, open Advanced, then the Internet tab, then click Apply. It should connect and log in with no errors.',
+  trouble:m=>'Pick what you are seeing and work down the checks.'
+};
+const S={t:'ok',log:'lan',ap:'ok',tr:'cloud'};
+const RC=(p,x,y,w,h,o)=>mk('rect',Object.assign({x,y,width:w,height:h},o||{}),p);
+const Tx=(p,x,y,s,o)=>{const e=mk('text',Object.assign({x,y},o||{}),p);e.textContent=s;return e;};
+const INK='#14161C';
+const LY=[96,170,244];
+function buildNet(){
+  const m=MOD.model;
+  $('#ctlT').textContent=m.ctl;
+  const L=$('#lanes'),Gt=$('#gates'),H=$('#hosts'),PK=$('#pk'); L.innerHTML='';Gt.innerHTML='';H.innerHTML='';PK.innerHTML='';
+  mk('path',{d:'M148 164 H176 V'+LY[0]+' M176 164 V'+LY[2],stroke:'currentColor','stroke-width':4,fill:'none','stroke-linecap':'round'},L);
+  m.ports.forEach((p,i)=>{const y=LY[i];
+    mk('path',{d:'M176 '+y+' H450',stroke:'currentColor','stroke-width':4,fill:'none','stroke-linecap':'round',opacity:.85},L);
+    const t=Tx(Gt,282,y-12,p[0]+'/'+p[1],{class:'ar','font-size':17,'font-weight':900,fill:'currentColor','text-anchor':'middle'});
+    Tx(Gt,282,y+22,p[2],{class:'ar','font-size':12,'font-weight':700,fill:'currentColor','text-anchor':'middle'});
+    const g=mk('g',{class:'gate',id:'gate'+i},Gt);
+    RC(g,352,y-24,52,48,{fill:'#C81E24',stroke:'#fff','stroke-width':2.5,rx:4});
+    Tx(g,378,y+6,'✕',{class:'ar','font-size':20,'font-weight':900,fill:'#fff','text-anchor':'middle'});
+    mk('circle',{class:'pk',cx:176,cy:y,r:6,fill:'#FFC800',stroke:INK,'stroke-width':2,opacity:0,id:'pk'+i},PK);
+  });
+  m.hosts.forEach((h,i)=>{const y=70+i*60,g=mk('g',{class:'host',id:'host'+i},H);
+    RC(g,466,y,308,50,{rx:12,fill:'#fff',stroke:INK,'stroke-width':2.5});
+    Tx(g,480,y+22,h[0],{class:'ar','font-size':h[0].length>28?13:16,'font-weight':800,fill:INK});
+    Tx(g,480,y+40,h[1],{'font-size':12,fill:'#444'});
+    mk('circle',{cx:752,cy:y+25,r:11,fill:'#ccc',class:'hd'},g);
+  });
+}
+function frame(title){
+  const w=$('#win'); w.innerHTML='';
+  RC(w,100,20,600,286,{rx:10,fill:'#F4F5F8',stroke:INK,'stroke-width':3}); RC(w,100,20,600,34,{rx:10,fill:INK}); RC(w,100,40,600,14,{fill:INK});
+  Tx(w,118,43,title,{class:'ar','font-size':15,'font-weight':800,fill:'#F4F5F8'}); return w;
+}
+function buildTest(){
+  const w=frame('Browser on a PC on the same network');
+  RC(w,116,68,568,30,{rx:15,fill:'#fff',stroke:INK,'stroke-width':2});
+  const u=Tx(w,134,89,'https://access.impactledsigns.com:443',{'font-size':16,fill:INK,'font-weight':700,id:'tUrl'});
+  const ok=mk('g',{id:'tOk'},w), bad=mk('g',{id:'tBad'},w);
+  mk('circle',{cx:400,cy:186,r:44,fill:'#0B8F4D'},ok); mk('path',{d:'M378 188 l16 16 l30 -34',fill:'none',stroke:'#fff','stroke-width':9,'stroke-linecap':'round','stroke-linejoin':'round'},ok);
+  Tx(ok,400,262,'The address responds on this port',{class:'ar','font-size':17,'font-weight':800,fill:INK,'text-anchor':'middle'});
+  mk('circle',{cx:400,cy:186,r:44,fill:'#C81E24'},bad); mk('path',{d:'M382 168 l36 36 M418 168 l-36 36',stroke:'#fff','stroke-width':9,'stroke-linecap':'round'},bad);
+  Tx(bad,400,262,'No response: the port looks blocked',{class:'ar','font-size':17,'font-weight':800,fill:INK,'text-anchor':'middle'});
+}
+function buildLog(){
+  const w=frame(S.log==='lan'?'Browser: controller log over the LAN':'Browser: controller log over USB');
+  RC(w,116,68,568,30,{rx:15,fill:'#fff',stroke:INK,'stroke-width':2});
+  Tx(w,134,89,S.log==='lan'?'http://192.0.2.50/api/logcat.json':'http://192.0.2.129/api/logcat.json',{'font-size':16,fill:INK,'font-weight':700});
+  Tx(w,116,128,S.log==='lan'?'Controller IP address (example), on the same network':'USB link address (example). Do not connect to the client’s network.',{'font-size':14,fill:'#444'});
+  RC(w,116,142,568,150,{rx:6,fill:'#14161C'});
+  const L=[['…  sync playlist  ok',0],['…  http request  access…  BLOCKED (example)',1],['…  ntp  ok',0],['…  http request  weather…  BLOCKED (example)',1],['…  heartbeat  retry',0]];
+  L.forEach((l,i)=>{const g=mk('g',{class:l[1]?'bl':'nl'},w);if(l[1])RC(g,122,152+i*26,556,22,{rx:3,fill:'#C81E24',opacity:.35});Tx(g,132,168+i*26,l[0],{'font-size':14,fill:l[1]?'#FFB3B3':'#C8CDD6','font-family':'monospace'});});
+  Tx(w,116,300,'Example log lines. Search for blocking messages about the HTTP connection.',{'font-size':12,fill:'#555'});
+}
+function buildApply(){
+  const w=frame('PC Pro: Advanced Settings');
+  ['Screen Settings','Detect Receiver Cards','Screen Parameters','Receiver Card Mapping','Internet','Other'].forEach((t,i)=>{const x=116+[0,100,200,300,430,500][i];Tx(w,x,82,t,{'font-size':i===4?14:12,fill:i===4?'#2336D8':'#555','font-weight':i===4?800:400,class:'ar'});});
+  mk('path',{d:'M430 88 H478',stroke:'#2336D8','stroke-width':3},w);
+  [['Terminal Account','(set on the controller)'],['Password','••••••••••••'],['URL','https://access.impactledsigns.com']].forEach((r,i)=>{Tx(w,330,126+i*30,r[0],{'font-size':14,fill:INK,'text-anchor':'end','font-weight':700});RC(w,342,110+i*30,230,22,{rx:3,fill:'#fff',stroke:'#aaa'});Tx(w,350,126+i*30,r[1],{'font-size':13,fill:'#555'});});
+  Tx(w,330,230,'Connect Status:',{'font-size':15,fill:INK,'text-anchor':'end','font-weight':700}); Tx(w,342,230,'',{'font-size':15,fill:INK,'font-weight':800,id:'apC'});
+  Tx(w,330,256,'Login Status:',{'font-size':15,fill:INK,'text-anchor':'end','font-weight':700}); Tx(w,342,256,'',{'font-size':15,fill:INK,'font-weight':800,id:'apL'});
+  RC(w,342,274,90,26,{rx:5,fill:'#6C8BE0',id:'apBtn'}); Tx(w,387,292,'Apply',{class:'ar','font-size':14,'font-weight':800,fill:'#fff','text-anchor':'middle'});
+  RC(w,442,274,90,26,{rx:5,fill:'#6C8BE0'}); Tx(w,487,292,'Logout',{class:'ar','font-size':14,'font-weight':800,fill:'#fff','text-anchor':'middle'});
+}
+const CASES={
+ cloud:{lbl:'Sign will not reach the cloud',out:'Almost always the customer’s firewall.',items:()=>{const m=MOD.model;return [['Controller has an IP address (DHCP by default)',0],['Open traffic to the cloud addresses',0],['Open ports '+m.ports.map(p=>p[0]).join(', ')+' through every firewall and filter',0],['Test from a PC: browse to the access address on the ports',0],['Still failing? Read the log for blocking messages',1]];}},
+ time:{lbl:'Time or NTP problem',out:'NTP uses port 123 over UDP.',items:()=>[['Open 123/UDP through the firewall',0],MOD.model.key==='cl'?['CloudLED SOP: only needed when NTP is not working properly',0]:['Cloud+ SOP lists 123/UDP as a standard port',0],['Check again once it is open',1]]},
+ bucket:{lbl:'Weather or playlist content missing',out:'That content comes from an Amazon S3 address.',items:()=>[[MOD.model.key==='cp'?'Weather: allow weather.cloudled.com':'Playlists: allow the playlist package bucket',0],['Allow it through all firewalls and network filtering systems',0],['Check again once it is open',1]]},
+ g4:{lbl:'Sign is on 4G',out:'Cloud+ on 4G is plug and play.',items:()=>[['4G connections need no extra configuration',0],['No customer firewall to open',0],['Still offline? Work the modem checks (Cradlepoint module)',1]]},
+ blocked:{lbl:'Log shows blocked HTTP',out:'The log names what is being blocked.',items:()=>[['Save the log file',0],['Search it for blocking messages on the HTTP connection',0],['Open what it names, or send the file to CL',0],['Test again from a PC and in PC Pro',1]]}
+};
+function drawFlow(items){
+  const f=$('#flow'); f.innerHTML=''; let y=18;
+  items.forEach((it,i)=>{
+    const h=it[0].length>58?58:44; const last=i===items.length-1&&it[1];
+    const g=mk('g',{class:'fb'},f);
+    RC(g,110,y,580,h,{rx:12,fill:last?'#0B8F4D':'#F4F5F8',stroke:last?'#0B8F4D':INK,'stroke-width':2.5});
+    let lines=[''];it[0].split(' ').forEach(w=>{const l=lines[lines.length-1];if((l+' '+w).length>56)lines.push(w);else lines[lines.length-1]=(l+' '+w).trim();});
+    lines.forEach((ln,j)=>Tx(g,400,y+(lines.length===1?h/2+6:22+j*19),ln,{class:'ar','font-size':16,'font-weight':700,fill:last?'#fff':INK,'text-anchor':'middle'}));
+    if(i<items.length-1){const a=mk('g',{class:'fa'},f); mk('path',{d:'M400 '+(y+h)+' v12 m-6 -6 l6 6 l6 -6',fill:'none',stroke:'currentColor','stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'},a);}
+    y+=h+16;
+  });
+}
+function ring(t,x,y,w,h,atT){
+  const o=(x+w/2)+' '+(y+h/2);
+  t.call(()=>{['#ringO','#ringI'].forEach(s=>{const e=$(s);e.setAttribute('x',x);e.setAttribute('y',y);e.setAttribute('width',w);e.setAttribute('height',h);});},null,atT);
+  t.fromTo('#rings',{autoAlpha:0,scale:1,svgOrigin:o},{autoAlpha:1,scale:1,svgOrigin:o,duration:.35,ease:'back.out(2)'},atT+.02);
+  if(!reduce) t.fromTo('#rings',{scale:1},{scale:1.06,svgOrigin:o,duration:.22,yoyo:true,repeat:5,ease:'sine.inOut'},atT+.45);
+}
+const flowPk=(i,t,atT)=>{ if(reduce)return; t.fromTo('#pk'+i,{x:0,opacity:1},{x:274,opacity:1,duration:1.1,ease:'none',repeat:2},atT); t.set('#pk'+i,{opacity:0},atT+3.4); };
+const MOD={ORDER,TITLES,THEME_OF,CAP,MODELS,model:MODELS.cp,SLIDER:[],
+  init(){},
+  kill(){gsap.killTweensOf(['#net','#win','#flow','#rings','.gate','.host','.pk','.fb','.fa','.bl','.nl','#tOk','#tBad','#apC','#apL']);},
+  prep(id){
+    const pos=ORDER.indexOf(id), m=MOD.model;
+    document.body.classList.add('nog');
+    if(MOD.built!==m.key){MOD.built=m.key;buildNet();}
+    gsap.set('#rings',{autoAlpha:0}); $('#outcome').textContent='';
+    const netOn=['intro','hosts','ports'].includes(id);
+    gsap.set('#net',{autoAlpha:netOn?1:0}); gsap.set(['#win','#flow'],{autoAlpha:0});
+    gsap.set('#ctl',{autoAlpha:1}); gsap.set('#cloud,#wall,#lanes',{autoAlpha:1});
+    gsap.set('.host',{autoAlpha:id==='intro'?1:(pos>=1?1:0)}); gsap.set('.hd',{fill:pos>=2?'#0B8F4D':'#ccc'});
+    gsap.set('#hosts',{autoAlpha:1}); gsap.set('.host',{autoAlpha:id==='hosts'?0:1});
+    const open=pos>=3;
+    m.ports.forEach((p,i)=>{gsap.set('#gate'+i,{autoAlpha:(open?0:1),y:0});gsap.set('#pk'+i,{opacity:0,x:0});});
+    if(id==='intro'){ m.ports.forEach((p,i)=>gsap.set('#gate'+i,{autoAlpha:1})); gsap.set('.hd',{fill:'#ccc'}); }
+    if(id==='hosts'){ gsap.set('.hd',{fill:'#ccc'}); setChecks(m.hosts.map(h=>'Open: '+h[0])); }
+    if(id==='ports'){ gsap.set('.hd',{fill:'#0B8F4D'}); setChecks(m.ports.map(p=>'Open '+p[0]+'/'+p[1]+' ('+p[2]+')')); }
+    if(id==='intro') setChecks(['Controller on the network (DHCP by default)','Addresses open through every firewall','Ports open: '+m.ports.map(p=>p[0]).join(', ')]);
+    if(id==='test'){ buildTest(); gsap.set('#tOk,#tBad',{autoAlpha:0}); setChecks(['PC on the same network as the controller','Browse to the access address on 443','Browse to the access address on 8443']);
+      setPick('Example result',[['ok','Responds'],['bad','Blocked']],S.t,v=>{S.t=v;go(cur);}); gsap.set('#pick',{autoAlpha:0}); }
+    if(id==='log'){ buildLog(); setChecks(['Controller address, or the USB link address','Open the logcat file and save it','Search for blocking messages on the HTTP connection']);
+      setPick('Connect by',[['lan','LAN'],['usb','USB']],S.log,v=>{S.log=v;go(cur);}); gsap.set('#pick',{autoAlpha:0}); gsap.set('.bl,.nl',{autoAlpha:0}); }
+    if(id==='apply'){ buildApply(); setChecks(['Advanced, then the Internet tab','Apply','No errors: connected and logged in']);
+      setPick('Example result',[['ok','No errors'],['err','Error']],S.ap,v=>{S.ap=v;go(cur);}); gsap.set('#pick',{autoAlpha:0}); }
+    if(id==='trouble'){ drawFlow(CASES[S.tr].items()); gsap.set('#flow',{autoAlpha:0}); setChecks([]);
+      setPick('Symptom',Object.keys(CASES).map(k=>[k,CASES[k].lbl]),S.tr,v=>{S.tr=v;go(cur);}); gsap.set('#pick',{autoAlpha:0}); }
+  },
+  scenes:{
+    intro(t){
+      t.fromTo(['#ctl','#wall','#cloud'],{y:30,autoAlpha:0},{y:0,autoAlpha:1,duration:.7,ease:'power3.out',stagger:.15},.2);
+      t.fromTo('#lanes',{autoAlpha:0},{autoAlpha:1,duration:.5},.9);
+      t.fromTo('.gate',{autoAlpha:0},{autoAlpha:1,duration:.4,stagger:.1},1.2);
+      t.fromTo('.host',{autoAlpha:0,x:20},{autoAlpha:1,x:0,duration:.4,stagger:.12},1.2);
+      t.fromTo('#meter',{x:30,autoAlpha:0},{x:0,autoAlpha:1,duration:.6},.5);
+      t.call(()=>setTag('Closed gates block the sign'),null,2.2);
+    },
+    hosts(t){
+      MOD.model.hosts.forEach((h,i)=>{
+        t.fromTo('#host'+i,{autoAlpha:0,x:24},{autoAlpha:1,x:0,duration:.45,ease:'power3.out'},.4+i*.8);
+        t.to('#host'+i+' .hd',{attr:{fill:'#0B8F4D'},duration:.3},1.0+i*.8);
+        t.call(()=>check(i,'ok'),null,1.0+i*.8);
+      });
+      t.call(()=>setTag('Allow through all firewalls and filters'),null,.4+MOD.model.hosts.length*.8);
+    },
+    ports(t){
+      MOD.model.ports.forEach((p,i)=>{
+        t.to('#gate'+i,{autoAlpha:0,y:-30,duration:.5,ease:'power2.in'},.5+i*.9);
+        t.call(()=>check(i,'ok'),null,.7+i*.9);
+        t.call(()=>{},null,0); flowPk(i,t,1.0+i*.9);
+      });
+      t.call(()=>setTag('Open gates: traffic flows'),null,3.4);
+    },
+    test(t){
+      t.fromTo('#win',{autoAlpha:0,y:24},{autoAlpha:1,y:0,duration:.5,ease:'power3.out'},.2);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.6);
+      t.call(()=>check(0,'ok'),null,.9);
+      t.call(()=>{$('#tUrl').textContent='https://access.impactledsigns.com:443';},null,1.2);
+      t.call(()=>{$('#tUrl').textContent='https://access.impactledsigns.com:8443';},null,3.0);
+      const k=S.t;
+      t.fromTo(k==='ok'?'#tOk':'#tBad',{autoAlpha:0},{autoAlpha:1,duration:.4},1.8); t.call(()=>check(1,k==='ok'?'ok':'bad'),null,1.9);
+      t.set(['#tOk','#tBad'],{autoAlpha:0},3.0);
+      t.fromTo(k==='ok'?'#tOk':'#tBad',{autoAlpha:0},{autoAlpha:1,duration:.4},3.6); t.call(()=>{check(2,k==='ok'?'ok':'bad');
+        $('#outcome').textContent=k==='ok'?'Both ports respond.':'A port will not respond: it is being blocked. Ask the customer’s network team to open it.';setTag(k==='ok'?'443 and 8443 reachable':'Blocked');},null,3.7);
+    },
+    log(t){
+      t.fromTo('#win',{autoAlpha:0,y:24},{autoAlpha:1,y:0,duration:.5,ease:'power3.out'},.2);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.6);
+      t.call(()=>check(0,'ok'),null,.9);
+      t.fromTo('.nl,.bl',{autoAlpha:0,x:-12},{autoAlpha:1,x:0,duration:.35,stagger:.2},1.2);
+      t.call(()=>check(1,'ok'),null,2.0);
+      ring(t,118,176,564,24,2.4); t.call(()=>{check(2,'ok');setTag('Look for blocked lines');},null,3.0);
+      t.call(()=>{$('#outcome').textContent=S.log==='lan'?'LAN: use the controller’s own IP address.':'USB: do not connect to the client’s network. Save the file and send it to CL.';},null,1.4);
+    },
+    apply(t){
+      t.fromTo('#win',{autoAlpha:0,y:24},{autoAlpha:1,y:0,duration:.5,ease:'power3.out'},.2);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.6);
+      t.call(()=>check(0,'ok'),null,.9);
+      ring(t,342,274,90,26,1.2); t.call(()=>check(1,'ok'),null,1.6);
+      t.to('#rings',{autoAlpha:0,duration:.2},2.2);
+      t.call(()=>{const ok=S.ap==='ok';$('#apC').textContent=ok?'Connected':'Not connected (example)';$('#apL').textContent=ok?'Login Succeed':'Login failed (example)';
+        $('#apC').setAttribute('fill',ok?'#0B8F4D':'#C81E24');$('#apL').setAttribute('fill',ok?'#0B8F4D':'#C81E24');
+        check(2,ok?'ok':'bad');$('#outcome').textContent=ok?'No errors: the controller can reach the cloud.':'Errors: go back and check the addresses and ports, and read the log.';setTag(ok?'Connected, logged in':'Errors');},null,2.4);
+    },
+    trouble(t){
+      const c=CASES[S.tr];
+      t.fromTo('#flow',{autoAlpha:0},{autoAlpha:1,duration:.3},.2);
+      t.fromTo('.fb',{y:16,autoAlpha:0},{y:0,autoAlpha:1,duration:.4,stagger:.5,ease:'power3.out'},.5);
+      t.fromTo('.fa',{autoAlpha:0},{autoAlpha:1,duration:.3,stagger:.5},.8);
+      t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.3},.4);
+      t.call(()=>{$('#outcome').textContent=c.out;setTag(c.lbl);},null,.6);
+    }
+  }
+};
+
+/* ---------- player ---------- */
+let steps=MOD.ORDER.slice(), cur=0, tl=null, auto=false, autoCall=null;
+function renderChips(){
+  const box=$('#models'); box.innerHTML='';
+  if(!MOD.MODELS){return;}
+  Object.values(MOD.MODELS).forEach(m=>{
+    const b=document.createElement('button'); b.className='chip'; b.setAttribute('aria-pressed',m===MOD.model);
+    b.innerHTML='<b>'+m.name+'</b><small>'+m.gen+'</small>'; b.onclick=()=>{MOD.model=m;renderChips();go(cur);}; box.appendChild(b);
+  });
+}
+function renderRail(){
+  const ol=$('#rail ol'); ol.innerHTML='';
+  steps.forEach((id,i)=>{
+    const li=document.createElement('li'); const b=document.createElement('button');
+    b.className=i===cur?'on':''; if(i===cur)b.setAttribute('aria-current','step');
+    b.innerHTML='<span class="n">'+(i+1)+'</span><span class="t">'+MOD.TITLES[id]+'</span>'; b.onclick=()=>go(i);
+    li.appendChild(b); ol.appendChild(li);
+  });
+}
+const cap=$('#cap');
+function caption(t,text){
+  cap.innerHTML='';
+  text.split(' ').forEach((w,i,a)=>{const s=document.createElement('span');s.className='w';s.textContent=w+(i<a.length-1?' ':'');cap.appendChild(s);});
+  t.fromTo(cap.children,{y:16,autoAlpha:0},{y:0,autoAlpha:1,duration:.4,stagger:.03,ease:'power2.out'},.2);
+}
+function setBtns(){ $('#bBack').disabled=cur===0; $('#bNext').textContent=cur===steps.length-1?'Restart':'Next'; }
+function done(id){
+  slider.disabled=!(MOD.SLIDER||[]).includes(id);
+  if(MOD.done)MOD.done(id);
+  if(autoCall){autoCall.kill();autoCall=null;}
+  if(auto&&cur<steps.length-1) autoCall=gsap.delayedCall(2.8,()=>go(cur+1));
+}
+function baseReset(){
+  gsap.set(['#plateWrap','#meter'],{autoAlpha:1,x:0,y:0});
+  gsap.set('#verdict',{autoAlpha:0});
+  gsap.set('#live',{autoAlpha:0,y:0});
+  gsap.set('#tag',{autoAlpha:0,y:0});
+  slider.disabled=true; gsap.killTweensOf(P);
+  if(probeB){probePark(probeB,[0,0,0]);probePark(probeR,[0,0,0]);}
+  configureGauge(...(MOD.gaugeCfg?MOD.gaugeCfg():[0,1,2,1,'V DC'])); render(null);
+  setPick('',null); setChecks([]);
+}
+function go(i){
+  i=Math.max(0,Math.min(steps.length-1,i));
+  if(tl)tl.kill(); if(autoCall){autoCall.kill();autoCall=null;}
+  gsap.killTweensOf(['#tag']);
+  if(MOD.kill)MOD.kill();
+  cur=i; const id=steps[i];
+  renderRail(); baseReset(); MOD.prep(id);
+  tl=gsap.timeline({onComplete:()=>done(id)});
+  themeTween(tl,MOD.THEME_OF[id],0);
+  caption(tl,MOD.CAP[id](MOD.model));
+  MOD.scenes[id](tl);
+  setBtns();
+  if(reduce) tl.progress(1);
+}
+$('#bNext').onclick=()=>go(cur===steps.length-1?0:cur+1);
+$('#bBack').onclick=()=>go(cur-1);
+$('#bReplay').onclick=()=>go(cur);
+$('#bAuto').onclick=function(){
+  auto=!auto; this.setAttribute('aria-pressed',auto);
+  if(auto&&tl&&!tl.isActive()&&cur<steps.length-1&&!autoCall) autoCall=gsap.delayedCall(1.2,()=>go(cur+1));
+  if(!auto&&autoCall){autoCall.kill();autoCall=null;}
+};
+document.addEventListener('keydown',e=>{
+  if(e.target&&e.target.type==='range')return;
+  if(e.key==='ArrowRight')go(cur+1); else if(e.key==='ArrowLeft')go(cur-1); else if(e.key==='r'||e.key==='R')go(cur);
+});
+if(MOD.init)MOD.init();
+renderChips(); go(0);
+
+})();
+</script>
+</body>
+</html>

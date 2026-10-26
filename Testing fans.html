@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Testing exhaust fans</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --panel:#F4F5F8; --panel-ink:#14161C; --pass:#0B8F4D; --fail:#C81E24;
+  --bg:#2336D8; --fg:#F4F6FF;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+}
+:root[data-theme="dark"]{ --panel:#171A22; --panel-ink:#F1F3F8; --pass:#3DDC84; --fail:#FF6B6B; }
+
+*,*::before,*::after{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid currentColor;outline-offset:3px}
+
+#app{min-height:100%;display:grid;grid-template-columns:minmax(0,1fr);gap:18px 28px;padding:18px clamp(14px,3vw,36px) 22px}
+@media (min-width:900px){
+  #app{height:100%;grid-template-columns:190px minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+  header,footer{grid-column:1 / -1}
+}
+
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+h1{margin:0;font-family:Archivo,"Helvetica Neue",Arial,sans-serif;font-weight:800;font-stretch:112%;font-size:clamp(20px,2.4vw,28px);letter-spacing:-.01em}
+#models{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;flex-direction:column;align-items:flex-start;border:2px solid currentColor;background:transparent;border-radius:14px;padding:6px 14px;min-height:44px;line-height:1.15;transition:background-color .2s,color .2s}
+.chip b{font-family:Archivo,sans-serif;font-weight:800;font-size:15px}
+.chip small{font-size:12px;opacity:.85}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+#rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+#rail button{display:flex;align-items:baseline;gap:12px;width:100%;text-align:left;background:none;border:0;border-left:5px solid transparent;padding:9px 0 9px 12px;opacity:.5;transition:opacity .2s}
+#rail button:hover{opacity:.85}
+#rail button.on{opacity:1;border-left-color:currentColor}
+#rail .n{font-family:Archivo,sans-serif;font-weight:800;font-size:22px;min-width:1.1em}
+#rail .t{font-size:16px;font-weight:700}
+@media (max-width:899px){
+  #rail ol{flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:4px}
+  #rail button{border-left:0;border-bottom:4px solid transparent;padding:6px 10px;white-space:nowrap;width:auto}
+  #rail button.on{border-bottom-color:currentColor}
+}
+
+#stage{position:relative;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:center}
+@media (min-width:900px){ #stage{grid-template-columns:minmax(0,1fr) 350px} }
+#plateWrap{min-height:0;height:100%;display:flex;align-items:center;justify-content:center}
+#plateWrap svg{width:100%;height:auto;max-height:100%;overflow:hidden}
+svg text{font-family:"Atkinson Hyperlegible",system-ui,sans-serif}
+.ar{font-family:Archivo,"Helvetica Neue",Arial,sans-serif !important}
+
+/* instrument panel */
+#meter{background:var(--panel);color:var(--panel-ink);border:3px solid var(--panel-ink);border-radius:22px;padding:16px 18px 18px;display:flex;flex-direction:column;gap:10px}
+.mode{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{display:inline-block;border:2px solid var(--panel-ink);border-radius:999px;font-weight:700;font-size:14px;padding:5px 12px;background:var(--panel-ink);color:var(--panel)}
+.note{font-size:13px;opacity:.7}
+.read{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-height:1em}
+#num{font-family:Archivo,sans-serif;font-weight:800;font-stretch:105%;font-size:clamp(56px,6vw,84px);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+#unit{font-family:Archivo,sans-serif;font-weight:700;font-size:26px}
+#status{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:16px;color:var(--panel-ink)}
+#status::before{content:"";width:12px;height:12px;border-radius:50%;background:currentColor;opacity:.35}
+#meter[data-state="pass"] #status{color:var(--pass)}
+#meter[data-state="pass"] #status::before{opacity:1}
+#meter[data-state="fail"] #status{color:var(--fail)}
+#meter[data-state="fail"] #status::before{opacity:1}
+.gauge{position:relative;height:78px;margin:4px 8px 0}
+.gauge .bar{position:absolute;left:0;right:0;top:27px;height:14px;border-radius:7px;background:color-mix(in srgb,var(--panel-ink) 16%,transparent)}
+#zone{position:absolute;top:23px;height:22px;border-radius:5px;background:var(--pass)}
+#marker{position:absolute;top:7px;width:4px;height:54px;margin-left:-2px;border-radius:2px;background:var(--panel-ink);opacity:0}
+#marker::before{content:"";position:absolute;top:-5px;left:50%;width:12px;height:12px;background:inherit;transform:translateX(-50%) rotate(45deg)}
+#meter[data-state="fail"] #marker{background:var(--fail)}
+.tick{position:absolute;top:54px;transform:translateX(-50%);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+#rule{font-size:14px;opacity:.8}
+.slide{display:flex;flex-direction:column;gap:4px;font-size:13px;opacity:.9}
+.slide input{width:100%;accent-color:var(--panel-ink)}
+.slide input:disabled{opacity:.35}
+
+/* paperwork flow */
+#verdict{position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;align-content:center;visibility:hidden;opacity:0}
+.vh{font-family:Archivo,sans-serif;font-weight:800;font-size:clamp(16px,1.8vw,22px);padding:0 4px}
+.vc{border-radius:16px;padding:14px 18px;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(16px,1.7vw,24px);line-height:1.2;color:#fff}
+.vc.pass{background:#0B8F4D}
+.vc.fail{background:#C81E24}
+.vc.merge{grid-column:1 / -1;background:transparent;color:inherit;border:3px solid currentColor}
+.conn{width:4px;height:20px;background:currentColor;margin:0 auto;transform-origin:top center}
+
+footer{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px 28px}
+#cap{margin:0;flex:1 1 320px;max-width:62ch;min-height:3.6em;font-family:Archivo,sans-serif;font-weight:600;font-size:clamp(20px,2.2vw,30px);line-height:1.18}
+.w{display:inline-block;white-space:pre}
+#ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:2px solid currentColor;background:transparent;border-radius:999px;padding:9px 18px;min-height:44px;font-weight:700;font-size:16px}
+.btn:disabled{opacity:.35;cursor:default}
+.btn.go{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn[aria-pressed="true"]{box-shadow:inset 0 0 0 3px currentColor}
+#num.word{font-size:clamp(34px,3.8vw,50px)}
+#pick{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;font-weight:700}
+#pick button{border:2px solid var(--panel-ink);background:transparent;color:var(--panel-ink);border-radius:999px;padding:4px 12px;min-height:32px}
+#pick button[aria-pressed="true"]{background:var(--panel-ink);color:var(--panel)}
+#outcome{font-size:15px;font-weight:700;min-height:2.6em}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Testing exhaust fans</h1>
+    <div id="models" role="group" aria-label="Fan generation"></div>
+  </header>
+
+  <nav id="rail" aria-label="Steps"><ol></ol></nav>
+
+  <main id="stage">
+    <div id="plateWrap">
+      <svg viewBox="0 0 800 340" role="img" aria-label="Power source, temperature sensor and exhaust fan, with a heat gun and a bypass wire">
+        <defs>
+          <linearGradient id="silver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2F4F6"/><stop offset=".5" stop-color="#C5CAD1"/><stop offset="1" stop-color="#8E959E"/></linearGradient>
+          <linearGradient id="shiny" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a4d55"/><stop offset=".3" stop-color="#15161a"/><stop offset="1" stop-color="#050506"/></linearGradient>
+          <linearGradient id="pcb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1E8F5A"/><stop offset="1" stop-color="#136b42"/></linearGradient>
+          <radialGradient id="glow"><stop offset="0" stop-color="#FF3B1F" stop-opacity=".95"/><stop offset=".6" stop-color="#FF7A1A" stop-opacity=".45"/><stop offset="1" stop-color="#FF7A1A" stop-opacity="0"/></radialGradient>
+          <filter id="blur" x="-10%" y="-200%" width="120%" height="500%"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+
+        <!-- wires: built in JS from GEO -->
+        <g id="wires"></g>
+
+        <!-- power source -->
+        <g id="powerG">
+          <rect x="30" y="118" width="120" height="104" rx="12" fill="#E7EAEF" stroke="#14161C" stroke-width="3"/>
+          <text id="pwTop" class="ar" x="90" y="158" font-size="14" font-weight="700" fill="#14161C" text-anchor="middle">Power</text>
+          <text id="pwVal" class="ar" x="90" y="192" font-size="22" font-weight="800" fill="#14161C" text-anchor="middle">AC</text>
+        </g>
+
+        <!-- sensors (one per type, centred on 400,170) -->
+        <g id="sensorG">
+          <g id="s-can">
+            <rect x="360" y="148" width="80" height="44" rx="10" fill="url(#silver)" stroke="#5d646d" stroke-width="2"/>
+            <rect x="360" y="148" width="14" height="44" rx="6" fill="#9ca3ac" stroke="#5d646d" stroke-width="2"/>
+            <rect x="426" y="148" width="14" height="44" rx="6" fill="#9ca3ac" stroke="#5d646d" stroke-width="2"/>
+            <line x1="382" y1="156" x2="418" y2="156" stroke="#fff" stroke-width="3" opacity=".7" stroke-linecap="round"/>
+          </g>
+          <g id="s-bead">
+            <rect x="378" y="154" width="44" height="32" rx="15" fill="#2c2f36" stroke="#0e0f11" stroke-width="2"/>
+            <rect x="385" y="159" width="30" height="5" rx="2.5" fill="#fff" opacity=".25"/>
+          </g>
+          <g id="s-probe">
+            <rect x="350" y="157" width="100" height="26" rx="13" fill="url(#shiny)" stroke="#000" stroke-width="2"/>
+            <rect x="362" y="161" width="76" height="4" rx="2" fill="#fff" opacity=".4"/>
+            <rect x="350" y="152" width="14" height="36" rx="4" fill="#2c2f36" stroke="#000" stroke-width="2"/>
+          </g>
+          <g id="s-card">
+            <rect x="340" y="90" width="120" height="160" rx="5" fill="url(#pcb)" stroke="#0b3d27" stroke-width="2"/>
+            <rect x="372" y="104" width="34" height="14" rx="2" fill="#E8D8A0" stroke="#8a7a3a"/>
+            <g fill="#14161a"><rect x="360" y="128" width="40" height="40" rx="3"/><rect x="412" y="132" width="26" height="14" rx="2"/><rect x="412" y="152" width="26" height="14" rx="2"/><rect x="352" y="186" width="24" height="12" rx="2"/><rect x="386" y="186" width="24" height="12" rx="2"/></g>
+            <g fill="#D8DCE2"><rect x="352" y="214" width="9" height="22"/><rect x="366" y="214" width="9" height="22"/><rect x="380" y="214" width="9" height="22"/><rect x="394" y="214" width="9" height="22"/></g>
+            <text class="ar" x="400" y="224" font-size="0"></text>
+          </g>
+          <circle id="heatGlow" cx="400" cy="170" r="34" fill="url(#glow)" opacity="0"/>
+        </g>
+        <text id="senLbl" class="ar" x="400" y="140" font-size="15" font-weight="700" fill="currentColor" text-anchor="middle"></text>
+
+        <!-- fan -->
+        <g id="fanG">
+          <ellipse cx="680" cy="262" rx="82" ry="7" fill="#000" opacity=".28" filter="url(#blur)"/>
+          <rect x="605" y="95" width="150" height="150" rx="14" fill="#1b1c20" stroke="#050506" stroke-width="2"/>
+          <circle cx="680" cy="170" r="64" fill="#0d0e10"/>
+          <g id="blades"></g>
+          <circle cx="680" cy="170" r="13" fill="#2c2f36" stroke="#0e0f11" stroke-width="2"/>
+          <g fill="none" stroke="#B8BDC5" stroke-width="2.2">
+            <circle cx="680" cy="170" r="62"/><circle cx="680" cy="170" r="47"/><circle cx="680" cy="170" r="32"/><circle cx="680" cy="170" r="17"/>
+            <line x1="618" y1="170" x2="742" y2="170"/><line x1="680" y1="108" x2="680" y2="232"/>
+            <line x1="636" y1="126" x2="724" y2="214"/><line x1="724" y1="126" x2="636" y2="214"/>
+          </g>
+          <g fill="#6e747d"><circle cx="617" cy="107" r="4"/><circle cx="743" cy="107" r="4"/><circle cx="617" cy="233" r="4"/><circle cx="743" cy="233" r="4"/></g>
+        </g>
+        <text class="ar" x="680" y="284" font-size="15" font-weight="700" fill="currentColor" text-anchor="middle">Exhaust fan</text>
+
+        <!-- heat gun with waves, aimed per model -->
+        <g id="gun" opacity="0">
+          <g id="gunBody">
+            <rect x="-34" y="-9" width="34" height="18" rx="3" fill="#1d6b36" stroke="#0d3a1c" stroke-width="2"/>
+            <rect x="-112" y="-17" width="80" height="34" rx="9" fill="#2FA84F" stroke="#0d3a1c" stroke-width="2"/>
+            <rect x="-96" y="-8" width="28" height="16" rx="3" fill="#7be39a" stroke="#0d3a1c"/>
+            <path d="M-94 14 L-70 14 L-60 62 L-84 62 Z" fill="#2FA84F" stroke="#0d3a1c" stroke-width="2" stroke-linejoin="round"/>
+            <g fill="none" stroke="#E02B2B" stroke-width="3" stroke-linecap="round">
+              <path class="wv" d="M8 -11 q5 -6 10 0 t10 0 t10 0"/>
+              <path class="wv" d="M8 0 q5 -6 10 0 t10 0 t10 0"/>
+              <path class="wv" d="M8 11 q5 -6 10 0 t10 0 t10 0"/>
+            </g>
+          </g>
+        </g>
+
+        <!-- rings + tag -->
+        <g id="ringS" opacity="0"><ellipse rx="40" ry="30" fill="none" stroke="#fff" stroke-width="7"/><ellipse rx="40" ry="30" fill="none" stroke="#14161C" stroke-width="3"/></g>
+        <text id="tag" class="ar" x="780" y="322" font-size="20" font-weight="800" fill="currentColor" text-anchor="end" opacity="0"></text>
+
+        <!-- live badge -->
+        <g id="live" opacity="0">
+          <rect x="18" y="14" width="190" height="36" rx="18" fill="#14130C"/>
+          <circle id="liveDot" cx="40" cy="32" r="7" fill="#FFC800"/>
+          <text id="liveTxt" x="56" y="38" fill="#FFC800" font-size="17" font-weight="700">Mains live</text>
+        </g>
+      </svg>
+    </div>
+
+    <aside id="meter" data-state="idle" aria-label="Bench readout">
+      <div class="mode">
+        <span class="pill" id="pill">120 to 240 V AC</span>
+        <span class="note">Example readings</span>
+      </div>
+      <div class="read"><span id="num" class="word">Stopped</span></div>
+      <div id="status" aria-live="polite">Waiting for heat</div>
+      <div class="gauge" id="gauge" aria-hidden="true">
+        <div class="bar"></div><div id="zone"></div><div id="marker"></div>
+        <span class="tick" id="tickLo">Cold</span><span class="tick" id="tickHi">Hot</span>
+      </div>
+      <div id="rule">Sensor temperature. The fan should start in the green zone.</div>
+      <label class="slide">Drag to heat the sensor
+        <input id="slider" type="range" min="0" max="1" step="0.01" value="0" disabled>
+      </label>
+      <div id="pick" style="opacity:0;visibility:hidden"><span>Example unit</span>
+        <button data-f="sensor" aria-pressed="true">Sensor faulty</button><button data-f="fan" aria-pressed="false">Fan faulty</button>
+      </div>
+      <div id="outcome" aria-live="polite"></div>
+    </aside>
+
+    <div id="verdict">
+      <div class="vh" data-row="0">Yes: fan starts when heated</div>
+      <div class="vh" data-row="0">No: faulty</div>
+      <div class="conn" data-row="c0"></div><div class="conn" data-row="c0"></div>
+      <div class="vc pass" data-row="1">Label it NFF on documentation tape, with the ticket number.</div>
+      <div class="vc fail" data-row="1">Note the fault, plus the ticket or sales order number.</div>
+      <div class="conn" data-row="c1"></div><div class="conn" data-row="c1"></div>
+      <div class="vc merge" data-row="2">Record it in iGO under RMA Returned Parts, then on the Zoho Desk ticket. Check Move To is set to the refurbished inventory location. Mark the iGO order complete.</div>
+      <div class="conn" data-row="c2"></div><div class="conn" data-row="c2"></div>
+      <div class="vc pass" data-row="3">Shelve it as a refurbished part.</div>
+      <div class="vc fail" data-row="3">Crate it with the parts going to the manufacturer for warranty replacement.</div>
+    </div>
+  </main>
+
+  <footer>
+    <p id="cap" aria-live="polite"></p>
+    <div id="ctl">
+      <button class="btn" id="bBack">Back</button>
+      <button class="btn" id="bReplay">Replay step</button>
+      <button class="btn" id="bAuto" aria-pressed="false">Auto-play</button>
+      <button class="btn go" id="bNext">Next</button>
+    </div>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+const NS='http://www.w3.org/2000/svg';
+const mk=(tag,attrs,parent)=>{const e=document.createElementNS(NS,tag);Object.keys(attrs||{}).forEach(k=>e.setAttribute(k,attrs[k]));if(parent)parent.appendChild(e);return e;};
+const root=document.documentElement;
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- data ---------- */
+const MODELS={
+  g1:{key:'g1',name:'Gen 1',gen:'AC · silver sensor',pwr:'ac',volt:'120 to 240 V AC',pw:'AC',sensor:'silver temp sensor',type:'can',lbl:'Silver temp sensor'},
+  g2:{key:'g2',name:'Gen 2',gen:'5 V DC · plastic sensor',pwr:'dc',volt:'5 V DC',pw:'5 V DC',sensor:'plastic-coated temp sensor',type:'bead',lbl:'Plastic-coated sensor'},
+  g3m:{key:'g3m',name:'Gen 3 manual',gen:'AC · black probe',pwr:'ac',volt:'120 to 240 V AC',pw:'AC',sensor:'black shiny temperature probe',type:'probe',lbl:'Black shiny probe'},
+  g3a:{key:'g3a',name:'Gen 3 automatic',gen:'AC · via receive card',pwr:'ac',volt:'120 to 240 V AC',pw:'AC',sensor:'left-most receive card',type:'card',lbl:''}
+};
+/* wire paths (in = power to sensor, out = sensor to fan, by = power straight to fan), heat target, gun pose */
+const GEO={
+  g1:{inP:'M150 170 H360',outP:'M440 170 H605',tgt:[400,170],gun:[372,212,-45],ring:[400,170,52,34]},
+  g2:{inP:'M150 170 H378',outP:'M422 170 H605',tgt:[400,170],gun:[372,212,-45],ring:[400,170,36,28]},
+  g3m:{inP:'M150 170 H350',outP:'M450 170 H605',tgt:[400,170],gun:[372,212,-45],ring:[400,170,62,32]},
+  g3a:{inP:'M150 170 H300 V70 H400 V90',outP:'M460 170 H605',tgt:[350,240],gun:[318,240,0],ring:[350,238,40,34]}
+};
+const BY='M90 118 V60 H680 V95';
+const ORDER=['intro','power','heat','bypass','paper'];
+const TITLES={intro:'Why test',power:'Power path',heat:'Apply heat',bypass:'Skip the sensor',paper:'Paperwork'};
+const THEME_OF={intro:'blue',power:'blue',heat:'yellow',bypass:'yellow',paper:'paper'};
+const THEMES={blue:{bg:'#2336D8',fg:'#F4F6FF'},yellow:{bg:'#FFC800',fg:'#14130C'},paper:{bg:'#E9ECF3',fg:'#14161C'}};
+const CAP={
+  intro:m=>'A temperature sensor switches the exhaust fan, so you test the two together. Heat the sensor and the fan should start. Yellow steps mean heat is involved as well as power.',
+  power:m=>({
+    g1:'Gen 1 fans run on 120 to 240 V AC, wired through the silver temp sensor. Skip the sensor and the fan runs flat out at 100%.',
+    g2:'Gen 2 fans run on 5 V DC, wired through the plastic-coated temp sensor. Skip the sensor and the fan runs flat out at 100%.',
+    g3m:'Gen 3 manual fans run on 120 to 240 V AC, wired through the black shiny temperature probe. Skip the probe and the fan runs flat out at 100%.',
+    g3a:'Gen 3 automatic fans take AC at the left-most receive card, facing the sign, through the AC pass-thru on top. The probe is attached but disabled. Skip the card and the fan runs at 100%.'
+  })[m.key],
+  heat:m=>m.type==='card'
+    ?'With it hooked into the sign, heat the lower left corner of the left-most receive card. After a few seconds the fan should start. Keep the heat off the other wires.'
+    :'With it hooked into the sign, heat the '+m.sensor+' directly. After a few seconds the fan should start. Keep the heat away from the power supply and other wires.',
+  bypass:m=>'No start? Hook the fan straight to power, skipping the '+(m.type==='card'?'receive card':'sensor')+'. If it runs, replace the temp sensor. If it stays dead, replace the fan, then check it with the sensor.'+(m.pwr==='ac'&&m.key!=='g1'?' This can be awkward, given how the fan is built.':''),
+  paper:m=>'Tag it, log it, then send it where it belongs: the shelf if it is good, the manufacturer crate if it is faulty.'
+};
+const OUT={sensor:'Runs on direct power: replace the temp sensor.',fan:'Dead on direct power: replace the fan, then check it with the sensor.'};
+const THR=.55;
+
+let model=MODELS.g1, steps=ORDER.slice(), cur=0, tl=null, auto=false, autoCall=null, builtFor=null;
+const S={heat:0,bypass:false,fault:'none',powered:false,pick:'sensor'};
+const geo=()=>GEO[model.key];
+
+/* ---------- theme ---------- */
+let theme={...THEMES.blue};
+const hex=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+const toHex=s=>s.startsWith('#')?s:'#'+s.match(/\d+/g).map(v=>(+v).toString(16).padStart(2,'0')).join('');
+const mix=(a,b,t)=>{const x=hex(toHex(a)),y=hex(toHex(b));return 'rgb('+x.map((v,i)=>Math.round(v+(y[i]-v)*t)).join(',')+')';};
+function applyTheme(){root.style.setProperty('--bg',theme.bg);root.style.setProperty('--fg',theme.fg);}
+function themeTween(t,key,pos){
+  const from={...theme}, to=THEMES[key], p={t:0};
+  t.to(p,{t:1,duration:reduce?0.01:0.7,ease:'power2.inOut',onUpdate(){
+    theme={bg:mix(from.bg,to.bg,p.t),fg:mix(from.fg,to.fg,p.t)}; applyTheme();
+  },onComplete(){theme={...to};applyTheme();}},pos);
+}
+applyTheme();
+
+/* ---------- readout ---------- */
+const meter=$('#meter'),num=$('#num'),statusEl=$('#status'),zone=$('#zone'),marker=$('#marker'),
+      tickLo=$('#tickLo'),tickHi=$('#tickHi'),slider=$('#slider'),outcome=$('#outcome');
+zone.style.left=(THR*100)+'%'; zone.style.width=((1-THR)*100)+'%';
+tickLo.style.left='0%'; tickHi.style.left='100%'; tickLo.style.transform='none'; tickHi.style.transform='translateX(-100%)';
+
+/* fan spin: one endless tween whose speed we change */
+const spin=reduce?null:gsap.to('#blades',{rotation:360,svgOrigin:'680 170',duration:.7,repeat:-1,ease:'none',paused:false});
+if(spin) spin.timeScale(0);
+function fanOk(){return S.fault!=='fan';}
+function viaSensor(){return S.heat>=THR && S.fault==='none';}
+function running(){return S.powered && fanOk() && (S.bypass||viaSensor());}
+function update(){
+  const run=running();
+  marker.style.opacity=1; marker.style.left=(S.heat*100)+'%';
+  gsap.set('#heatGlow',{opacity:S.heat*.9});
+  num.textContent=run?'Running':'Stopped';
+  let st='idle',txt='Waiting for heat';
+  if(S.bypass){ st=run?'pass':'fail'; txt=run?'Runs on direct power':'Dead on direct power'; }
+  else if(!S.powered){ txt='Not powered yet'; }
+  else if(run){ st='pass'; txt=S.heat>=THR&&S.fault==='none'?'Fan starts: good':'Running'; }
+  else if(S.heat>=THR){ st='fail'; txt='No start'; }
+  else if(S.heat>0){ txt='Warming up'; }
+  meter.dataset.state=st; statusEl.textContent=txt;
+  if(spin) gsap.to(spin,{timeScale:run?(S.bypass||viaSensor()?1:0):0,duration:run?.9:.5,overwrite:true});
+  gsap.set('.fl-in',{opacity:S.powered?1:0});
+  gsap.set('.fl-out',{opacity:(S.powered&&viaSensor()&&!S.bypass)?1:0});
+  gsap.set('.fl-by',{opacity:(S.powered&&S.bypass)?1:0});
+}
+slider.addEventListener('input',()=>{S.heat=+slider.value;update();});
+
+/* ---------- build ---------- */
+function buildBlades(){
+  const g=$('#blades'); g.innerHTML='';
+  for(let i=0;i<5;i++){
+    mk('path',{d:'M680 170 C 690 140 722 126 740 140 C 724 152 704 160 680 170 Z',fill:'#3a3d44',stroke:'#0e0f11','stroke-width':1.5,transform:'rotate('+(i*72)+' 680 170)'},g);
+  }
+}
+function buildWires(){
+  const g=geo(), box=$('#wires'); box.innerHTML='';
+  const col=model.pwr==='dc'?'#E02B2B':'#111111';
+  const mkW=(d,cls,w)=>{
+    const grp=mk('g',{class:'wire '+cls},box);
+    mk('path',{d,fill:'none',stroke:'#8b919b','stroke-width':13,'stroke-linecap':'round','stroke-linejoin':'round'},grp);
+    mk('path',{d,fill:'none',stroke:col,'stroke-width':7,'stroke-linecap':'round','stroke-linejoin':'round'},grp);
+    const f=mk('path',{d,class:'fl '+cls.replace('w-','fl-'),fill:'none',stroke:'#FFC800','stroke-width':3.2,'stroke-linecap':'round','stroke-dasharray':'2 15',opacity:0},box);
+    const len=Math.ceil(grp.firstChild.getTotalLength())+2;
+    [grp.children[0],grp.children[1]].forEach(p=>{p.style.strokeDasharray=len;p.style.strokeDashoffset=len;p.dataset.len=len;});
+    return grp;
+  };
+  mkW(g.inP,'w-in'); mkW(g.outP,'w-out'); mkW(BY,'w-by');
+}
+function setModel0(){
+  if(builtFor===model.key)return; builtFor=model.key;
+  ['can','bead','probe','card'].forEach(t=>gsap.set('#s-'+t,{autoAlpha:t===model.type?1:0}));
+  $('#pwVal').textContent=model.pw; $('#pill').textContent=model.volt;
+  $('#senLbl').textContent=model.lbl; $('#liveTxt').textContent=model.pwr==='dc'?'5 V DC live':'Mains live';
+  const g=geo();
+  gsap.set('#heatGlow',{attr:{cx:g.tgt[0],cy:g.tgt[1]}});
+  gsap.set('#gun',{x:g.gun[0],y:g.gun[1],rotation:g.gun[2]});
+  $$('#ringS ellipse').forEach(e=>{e.setAttribute('rx',g.ring[2]);e.setAttribute('ry',g.ring[3]);});
+  gsap.set('#ringS',{x:g.ring[0],y:g.ring[1]});
+  buildWires();
+}
+function renderChips(){
+  const box=$('#models'); box.innerHTML='';
+  Object.values(MODELS).forEach(m=>{
+    const b=document.createElement('button'); b.className='chip'; b.setAttribute('aria-pressed',m===model);
+    b.innerHTML='<b>'+m.name+'</b><small>'+m.gen+'</small>'; b.onclick=()=>{model=m;renderChips();go(cur);}; box.appendChild(b);
+  });
+}
+function renderRail(){
+  const ol=$('#rail ol'); ol.innerHTML='';
+  steps.forEach((id,i)=>{
+    const li=document.createElement('li'); const b=document.createElement('button');
+    b.className=i===cur?'on':''; if(i===cur)b.setAttribute('aria-current','step');
+    b.innerHTML='<span class="n">'+(i+1)+'</span><span class="t">'+TITLES[id]+'</span>'; b.onclick=()=>go(i);
+    li.appendChild(b); ol.appendChild(li);
+  });
+}
+buildBlades(); gsap.set('#gun',{svgOrigin:'0 0'});
+if(!reduce) gsap.to('#liveDot',{opacity:.25,duration:.5,yoyo:true,repeat:-1,ease:'sine.inOut'});
+const dashFlow=reduce?null:gsap.to({o:0},{o:-34,duration:1.1,repeat:-1,ease:'none',onUpdate(){$$('.fl').forEach(p=>p.style.strokeDashoffset=this.targets()[0].o);}});
+const setTag=text=>{const e=$('#tag');e.textContent=text;gsap.fromTo(e,{autoAlpha:0,y:8},{autoAlpha:1,y:0,duration:.35});};
+const drawW=(t,sel,at,d)=>t.to(sel+' path:not(.fl)',{strokeDashoffset:0,duration:d||.6,ease:'power3.out'},at);
+
+/* ---------- prep ---------- */
+function prep(id){
+  setModel0();
+  const pos=ORDER.indexOf(id);
+  S.heat=0; S.bypass=false; S.fault=(id==='bypass')?S.pick:'none'; S.powered=pos>=2;
+  gsap.set(['#plateWrap','#meter'],{autoAlpha:1,x:0,y:0});
+  gsap.set(['#powerG','#sensorG','#fanG','#senLbl'],{autoAlpha:pos>0?1:0,y:0});
+  $$('.wire path:not(.fl)').forEach(p=>{p.style.strokeDashoffset=(pos>=2||(id==='power'&&false))?0:p.dataset.len;});
+  if(pos>=2){ $$('.wire.w-by path:not(.fl)').forEach(p=>p.style.strokeDashoffset=p.dataset.len); }
+  gsap.set('#gun',{autoAlpha:0}); gsap.set('.wv',{opacity:0});
+  gsap.set('#ringS',{autoAlpha:0}); gsap.set('#tag',{autoAlpha:0});
+  gsap.set('#live',{autoAlpha:0,y:0});
+  gsap.set('#verdict',{autoAlpha:0});
+  gsap.set('#pick',{autoAlpha:0}); outcome.textContent='';
+  $$('#pick button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.f===S.pick));
+  slider.disabled=true; slider.value=0;
+  if(id==='bypass'){ S.heat=1; }
+  update();
+}
+
+/* ---------- scenes ---------- */
+const SCENES={
+  intro(t){
+    t.fromTo(['#powerG','#sensorG','#fanG','#senLbl'],{y:50,autoAlpha:0},{y:0,autoAlpha:1,duration:.9,ease:'power3.out',stagger:.12},.2);
+    t.fromTo('#meter',{x:40,autoAlpha:0},{x:0,autoAlpha:1,duration:.7,ease:'power3.out'},.5);
+  },
+  power(t){
+    drawW(t,'.w-in',.3); drawW(t,'.w-out',.7);
+    t.call(()=>{S.powered=true;update();},null,1.3);
+    t.fromTo('#ringS',{scale:.5,autoAlpha:0},{scale:1,autoAlpha:1,duration:.5,ease:'back.out(2)'},1.8);
+    t.to('#ringS',{scale:1.1,yoyo:true,repeat:3,duration:.4,ease:'sine.inOut'},2.3);
+    t.to('#ringS',{autoAlpha:0,duration:.3},3.8);
+    drawW(t,'.w-by',4.0,.7);
+    t.call(()=>{S.bypass=true;update();setTag('No sensor in line: the fan runs at 100%');},null,4.8);
+    t.call(()=>{S.bypass=false;update();},null,7.0);
+    t.to('.w-by path:not(.fl)',{strokeDashoffset:(i,el)=>+el.dataset.len,duration:.5},7.0);
+    t.to('#tag',{autoAlpha:0,duration:.3},7.0);
+  },
+  heat(t){
+    t.fromTo('#live',{autoAlpha:0,y:-10},{autoAlpha:1,y:0,duration:.4},.2);
+    t.fromTo('#gun',{autoAlpha:0},{autoAlpha:1,duration:.5},.5);
+    t.fromTo('.wv',{opacity:0},{opacity:1,duration:.3,stagger:.1},1.0);
+    t.to('.wv',{x:6,yoyo:true,repeat:11,duration:.2,ease:'sine.inOut'},1.0);
+    const p={h:0};
+    t.to(p,{h:1,duration:3,ease:'power1.in',onUpdate(){S.heat=p.h;update();}},1.2);
+    t.call(()=>setTag('The fan starts after a few seconds'),null,4.3);
+  },
+  bypass(t){
+    t.fromTo('#live',{autoAlpha:0,y:-10},{autoAlpha:1,y:0,duration:.4},.2);
+    t.set('#gun',{autoAlpha:1},0); t.set('.wv',{opacity:1},0);
+    t.call(()=>setTag('Heated, but no start'),null,.6);
+    t.to('#gun',{autoAlpha:0,duration:.4},2.0);
+    t.to('#tag',{autoAlpha:0,duration:.3},2.0);
+    t.fromTo('#pick',{autoAlpha:0},{autoAlpha:1,duration:.4},2.2);
+    t.to('.w-by path:not(.fl)',{strokeDashoffset:0,duration:.7,ease:'power3.out'},2.3);
+    t.call(()=>{S.heat=0;S.bypass=true;update();},null,3.1);
+    t.call(()=>{outcome.textContent=OUT[S.fault];},null,4.2);
+  },
+  paper(t){
+    t.to(['#plateWrap','#meter'],{autoAlpha:0,y:-24,duration:.5,ease:'power2.in'},0);
+    t.set('#verdict',{autoAlpha:1},.5);
+    [0,1,2,3].forEach(r=>{
+      t.fromTo('#verdict [data-row="'+r+'"]',{y:24,autoAlpha:0},{y:0,autoAlpha:1,duration:.5,stagger:.12,ease:'power3.out'},.6+r*.75);
+      if(r<3) t.fromTo('#verdict [data-row="c'+r+'"]',{scaleY:0},{scaleY:1,duration:.3,ease:'none'},.6+r*.75+.45);
+    });
+  }
+};
+
+/* ---------- player ---------- */
+const cap=$('#cap');
+function caption(t,text){
+  cap.innerHTML='';
+  text.split(' ').forEach((w,i,a)=>{const s=document.createElement('span');s.className='w';s.textContent=w+(i<a.length-1?' ':'');cap.appendChild(s);});
+  t.fromTo(cap.children,{y:16,autoAlpha:0},{y:0,autoAlpha:1,duration:.4,stagger:.03,ease:'power2.out'},.2);
+}
+function setBtns(){ $('#bBack').disabled=cur===0; $('#bNext').textContent=cur===steps.length-1?'Restart':'Next'; }
+function done(id){
+  slider.disabled=id!=='heat';
+  if(id==='heat') slider.value=S.heat;
+  if(autoCall){autoCall.kill();autoCall=null;}
+  if(auto&&cur<steps.length-1) autoCall=gsap.delayedCall(2.8,()=>go(cur+1));
+}
+function go(i){
+  i=Math.max(0,Math.min(steps.length-1,i));
+  if(tl)tl.kill(); if(autoCall){autoCall.kill();autoCall=null;}
+  gsap.killTweensOf(['#tag','#gun','#ringS','.wv']);
+  cur=i; const id=steps[i];
+  renderRail(); prep(id);
+  tl=gsap.timeline({onComplete:()=>done(id)});
+  themeTween(tl,THEME_OF[id],0);
+  caption(tl,CAP[id](model));
+  SCENES[id](tl);
+  setBtns();
+  if(reduce) tl.progress(1);
+}
+$$('#pick button').forEach(b=>b.addEventListener('click',()=>{ if(steps[cur]!=='bypass')return; S.pick=b.dataset.f; go(cur); }));
+$('#bNext').onclick=()=>go(cur===steps.length-1?0:cur+1);
+$('#bBack').onclick=()=>go(cur-1);
+$('#bReplay').onclick=()=>go(cur);
+$('#bAuto').onclick=function(){
+  auto=!auto; this.setAttribute('aria-pressed',auto);
+  if(auto&&tl&&!tl.isActive()&&cur<steps.length-1&&!autoCall) autoCall=gsap.delayedCall(1.2,()=>go(cur+1));
+  if(!auto&&autoCall){autoCall.kill();autoCall=null;}
+};
+document.addEventListener('keydown',e=>{
+  if(e.target&&e.target.type==='range')return;
+  if(e.key==='ArrowRight')go(cur+1); else if(e.key==='ArrowLeft')go(cur-1); else if(e.key==='r'||e.key==='R')go(cur);
+});
+renderChips(); go(0);
+})();
+</script>
+</body>
+</html>
